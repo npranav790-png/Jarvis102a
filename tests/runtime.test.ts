@@ -144,7 +144,7 @@ describe('JarvisRuntime (Prompt 5)', () => {
       isLocal: true,
       transcribe: async () => ({ id: '1', voiceSessionId: '2', text: 'hello', isFinal: true, confidence: 1, provider: 'mock', createdAt: '' }),
       isAvailable: async () => true
-    });
+    }, true);
 
     assert.strictEqual(runtime.voiceRegistry.STT.name, 'Mock STT');
   });
