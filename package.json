@@ -1,0 +1,48 @@
+{
+  "name": "jarvis-core",
+  "version": "2.0.0",
+  "description": "JARVIS 2.0 — Autonomous Personal AI Operating & Orchestration System",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "jarvis": "./dist/cli/bin.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node dist/cli/bin.js",
+    "jarvis": "node dist/cli/bin.js",
+    "desktop": "npm --prefix ui run desktop",
+    "test": "tsc && node --test --experimental-strip-types tests/**/*.test.ts"
+  },
+  "keywords": [
+    "jarvis",
+    "ai",
+    "agent",
+    "orchestrator",
+    "autonomous",
+    "headless"
+  ],
+  "author": "JARVIS Architecture Team",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "ws": "^8.22.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.13.9",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

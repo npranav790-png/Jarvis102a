@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# SQLite databases & Local data
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.keystore
+*.jks
+
+# Android Build & Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/gradle_temp/
+android/jdk/
+*.apk
+*.aab
+.gradle/
+
+# Logs
+logs/
+*.log
+
+# UI Build & Dependencies
+ui/node_modules/
+ui/dist/
+ui/dist-ssr/
+
+# Heavy archives & temporary test workspaces
+gradle.zip
+pokemon-app/
+work/
+jarvis-tree.txt
+test_kilo_ps1.js
+test_terminal.js
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.iml
