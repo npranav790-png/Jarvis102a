@@ -1,10 +1,24 @@
 import React, { useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useJarvisStore } from '../../store/jarvisStore';
 import { CoreRenderer } from './CoreRenderer';
 
 export const NeuralCore: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CoreRenderer | null>(null);
+  const location = useLocation();
+
+  const isHomePage = location.pathname === '/' || location.pathname === '';
+  const isHomePageRef = useRef(isHomePage);
+
+  useEffect(() => {
+    isHomePageRef.current = isHomePage;
+    if (!isHomePage && rendererRef.current) {
+      // Whenever navigating away from the Home view, smoothly reset any custom rotation or zoom
+      // so the core stays centered in its calm ambient state for other pages.
+      rendererRef.current.interaction.reset();
+    }
+  }, [isHomePage]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,45 +45,42 @@ export const NeuralCore: React.FC = () => {
       animationFrameId = requestAnimationFrame(renderLoop);
     };
 
-    // Events routing
+    // Events routing — strictly active on the Home view only
     const onPointerDown = (e: PointerEvent) => {
+      if (!isHomePageRef.current) return;
       try { canvas.setPointerCapture(e.pointerId); } catch {}
       renderer.interaction.onPointerDown(e);
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      if (!isHomePageRef.current) return;
       renderer.interaction.onPointerMove(e);
     };
 
     const onPointerUp = (e: PointerEvent) => {
+      if (!isHomePageRef.current) return;
       try { canvas.releasePointerCapture(e.pointerId); } catch {}
       renderer.interaction.onPointerUp(e);
     };
 
     const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      renderer.interaction.onWheel(e);
-    };
-
-    // Also handle wheel on the parent container if pointer is over empty area
-    const onContainerWheel = (e: WheelEvent) => {
-      const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('form') || target.closest('[data-scrollable="true"]'))) {
-        return; // Allow scrolling inside form elements or designated scrollable popovers
-      }
+      if (!isHomePageRef.current) return;
       e.preventDefault();
       renderer.interaction.onWheel(e);
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (!isHomePageRef.current) return;
       renderer.interaction.handleKeyDown(e);
     };
 
     const onDblClick = () => {
+      if (!isHomePageRef.current) return;
       renderer.interaction.reset();
     };
 
     const onGesture = (e: CustomEvent) => {
+      if (!isHomePageRef.current) return;
       const { type, x, y, pinchDist } = e.detail;
       renderer.interaction.applyGesture(type, x, y, pinchDist);
     };
@@ -91,7 +102,6 @@ export const NeuralCore: React.FC = () => {
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('dblclick', onDblClick);
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('wheel', onContainerWheel, { passive: false });
     window.addEventListener('jarvis-gesture' as any, onGesture);
 
     renderLoop();
@@ -107,7 +117,6 @@ export const NeuralCore: React.FC = () => {
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('dblclick', onDblClick);
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('wheel', onContainerWheel);
       window.removeEventListener('jarvis-gesture' as any, onGesture);
 
       renderer.dispose();
@@ -150,7 +159,7 @@ export const NeuralCore: React.FC = () => {
         height: '100%',
         touchAction: 'none',
         display: 'block',
-        pointerEvents: 'auto',
+        pointerEvents: isHomePage ? 'auto' : 'none',
       }}
     />
   );
