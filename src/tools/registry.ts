@@ -8,6 +8,7 @@ import { ArtifactManager } from './artifacts.js';
 import { MemorySanitizer } from '../brain/memory/sanitizer.js';
 import { EventBus } from '../events/bus.js';
 import { createEvent } from '../events/types.js';
+import { toolToDeclaration, ToolDeclaration } from './declarations.js';
 import { rootLogger } from '../logging/logger.js';
 
 const logger = rootLogger.child('ToolRegistry');
@@ -78,6 +79,16 @@ export class ToolRegistry {
       const caps = tool.capabilities || [];
       return caps.includes(capability) || caps.some(c => c.startsWith(`${capability}.`));
     });
+  }
+
+  /**
+   * Generates LLM function calling schema declarations for available registered tools.
+   */
+  public getDeclarations(filter?: (tool: ITool<any, any>) => boolean): ToolDeclaration[] {
+    const tools = filter ? this.list().filter(filter) : this.list();
+    return tools
+      .filter(t => this.getStatus(t.name) === 'AVAILABLE')
+      .map(t => toolToDeclaration(t));
   }
 
   /**

@@ -17,6 +17,7 @@ import { WhisperLocalSTTProvider } from './providers/whisper-stt.js';
 import { OpenWakeWordDetector } from './providers/open-wakeword.js';
 import { MockSTTProvider, MockTTSProvider } from './providers/mock.js';
 import { GeminiTTSProvider } from './providers/gemini-tts.js';
+import { GeminiSTTProvider } from './providers/gemini-stt.js';
 import { VoiceCache } from './cache.js';
 
 const logger = rootLogger.child('VoiceRegistry');
@@ -78,11 +79,17 @@ export class VoiceRegistry {
     });
     this.registerSTT(whisperSTT);
 
-    // 6. OpenWakeWord
+    // 6. Gemini Cloud STT Provider (Zero-cost free-tier)
+    const geminiSTT = new GeminiSTTProvider({
+      apiKey: config.providers.geminiApiKey,
+    });
+    this.registerSTT(geminiSTT);
+
+    // 7. OpenWakeWord
     const wakeDetector = new OpenWakeWordDetector('hey jarvis');
     this.registerWakeWord(wakeDetector);
 
-    // 7. Select active providers based on config and availability
+    // 8. Select active providers based on config and availability
     await this.selectActiveProviders(config);
   }
 
@@ -94,9 +101,13 @@ export class VoiceRegistry {
       this.activeStt = sttCandidate;
       logger.info(`Active STT provider selected: ${sttCandidate.name} (${sttCandidate.id})`);
     } else {
-      // Fallback order: system -> mock
+      // Fallback order: gemini-stt -> system -> mock
+      const geminiStt = this.sttProviders.get('gemini-stt');
       const sysStt = this.sttProviders.get('system');
-      if (sysStt && (await sysStt.isAvailable())) {
+      if (geminiStt && (await geminiStt.isAvailable()) && !config.app.offline) {
+        this.activeStt = geminiStt;
+        logger.info(`Fell back to Gemini Cloud STT provider: ${geminiStt.name}`);
+      } else if (sysStt && (await sysStt.isAvailable())) {
         this.activeStt = sysStt;
         logger.info(`Fell back to system STT provider: ${sysStt.name}`);
       } else {

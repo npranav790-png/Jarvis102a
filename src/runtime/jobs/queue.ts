@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { JarvisEngine } from '../../core/engine.js';
 import { RuntimeJobRepository } from '../../database/runtime-repository.js';
 import { RuntimeJob, JobStatus } from '../types.js';
+import { ChatMessage } from '../../providers/types.js';
 import { rootLogger } from '../../logging/logger.js';
 import { createEvent } from '../../events/types.js';
 
@@ -121,7 +122,7 @@ export class JobQueue {
       } else if (record.type === 'PROCESS_CHAT') {
         try {
           const sessionId = payload.sessionId;
-          let messagesList: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+          let messagesList: ChatMessage[] = [];
 
           if (sessionId && this.engine.messageRepo) {
             const past = this.engine.messageRepo.listBySession(sessionId, 10);
@@ -137,11 +138,77 @@ export class JobQueue {
             messagesList.push({ role: 'user', content: payload.message });
           }
 
-          const aiResult = await this.engine.aiService.generate({
-            modelId: '',
-            messages: messagesList,
-            routing: { taskType: payload.mode || 'GENERAL' }
-          });
+          const availableTools = this.engine.toolRegistry ? this.engine.toolRegistry.getDeclarations() : [];
+          const maxToolSteps = 5;
+          let currentStep = 0;
+          let aiResult: any;
+
+          while (currentStep < maxToolSteps) {
+            aiResult = await this.engine.aiService.generate({
+              modelId: '',
+              messages: messagesList,
+              tools: availableTools.length > 0 ? availableTools : undefined,
+              routing: { taskType: payload.mode || 'GENERAL' }
+            });
+
+            if (!aiResult.toolCalls || aiResult.toolCalls.length === 0) {
+              break;
+            }
+
+            // Record assistant message with tool calls
+            messagesList.push({
+              role: 'assistant',
+              content: aiResult.content || '',
+              toolCalls: aiResult.toolCalls,
+            });
+
+            // Execute tool calls
+            for (const call of aiResult.toolCalls) {
+              let parsedInput: any = {};
+              try {
+                parsedInput = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments || {};
+              } catch {
+                parsedInput = {};
+              }
+
+              await this.engine.eventBus.emit(createEvent('chat:tool_executing', 'JobQueue', {
+                toolName: call.name,
+                toolCallId: call.id,
+                input: parsedInput,
+                sessionId,
+                taskId: record.task_id,
+              }));
+
+              let toolOutput = '';
+              try {
+                const toolRes = await this.engine.toolRegistry.executeTool({
+                  callId: call.id,
+                  toolName: call.name,
+                  input: parsedInput,
+                  context: { sessionId, taskId: record.task_id, actor: 'chat:user' }
+                });
+
+                if (toolRes.success) {
+                  toolOutput = typeof toolRes.output === 'string'
+                    ? toolRes.output
+                    : JSON.stringify(toolRes.output ?? { success: true });
+                } else {
+                  toolOutput = JSON.stringify({ error: toolRes.error?.message || 'Tool execution failed' });
+                }
+              } catch (err: any) {
+                toolOutput = JSON.stringify({ error: err.message || 'Execution error' });
+              }
+
+              messagesList.push({
+                role: 'tool',
+                name: call.name,
+                toolCallId: call.id,
+                content: toolOutput,
+              });
+            }
+
+            currentStep++;
+          }
 
           const assistMsgId = `msg_${Date.now()}_j`;
           if (this.engine.messageRepo) {

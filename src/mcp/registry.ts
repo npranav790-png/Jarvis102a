@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { MCPServerConfig, MCPConnectionStatus } from './types.js';
 import { MCPClient } from './client.js';
 import { MCPToolAdapter } from './tool-adapter.js';
@@ -42,7 +44,7 @@ export class MCPRegistry {
         id,
         name: fullConfig.name,
         description: fullConfig.description || '',
-        command: fullConfig.command,
+        command: fullConfig.command || fullConfig.url || '',
         args_json: JSON.stringify(fullConfig.args || []),
         env_json: JSON.stringify(fullConfig.env || {}),
         transport: fullConfig.transport || 'STDIO',
@@ -167,5 +169,61 @@ export class MCPRegistry {
 
   public hasServer(name: string): boolean {
     return this.servers.has(name);
+  }
+
+  /**
+   * Loads and registers MCP servers from a JSON configuration file (e.g. config/mcp_servers.json).
+   * Supports standard Claude Desktop format ("mcpServers": { ... }) and array format.
+   */
+  public async loadFromConfigFile(filePath: string, autoConnect = false): Promise<number> {
+    try {
+      const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+      if (!fs.existsSync(fullPath)) {
+        logger.debug(`MCP config file not found at: ${fullPath}`);
+        return 0;
+      }
+
+      const content = await fs.promises.readFile(fullPath, 'utf8');
+      const data = JSON.parse(content);
+      const serverConfigs: MCPServerConfig[] = [];
+
+      if (data && typeof data === 'object') {
+        if (data.mcpServers && typeof data.mcpServers === 'object') {
+          for (const [name, cfg] of Object.entries(data.mcpServers)) {
+            if (cfg && typeof cfg === 'object') {
+              serverConfigs.push({
+                name,
+                ...(cfg as any),
+              });
+            }
+          }
+        } else if (Array.isArray(data.servers)) {
+          serverConfigs.push(...data.servers);
+        } else if (Array.isArray(data)) {
+          serverConfigs.push(...data);
+        }
+      }
+
+      let registeredCount = 0;
+      for (const cfg of serverConfigs) {
+        if (cfg.enabled !== false) {
+          await this.registerServer(cfg);
+          registeredCount++;
+          if (autoConnect) {
+            try {
+              await this.connectServer(cfg.name);
+            } catch (connErr: any) {
+              logger.warn(`Could not auto-connect MCP server '${cfg.name}': ${connErr.message}`);
+            }
+          }
+        }
+      }
+
+      logger.info(`Loaded ${registeredCount} MCP servers from ${filePath}`);
+      return registeredCount;
+    } catch (err: any) {
+      logger.error(`Failed to load MCP configuration from ${filePath}: ${err.message}`);
+      return 0;
+    }
   }
 }

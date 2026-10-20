@@ -66,7 +66,7 @@ export class GeminiTTSProvider implements TextToSpeechProvider {
     this.model =
       options.model ||
       process.env.GEMINI_TTS_MODEL ||
-      'gemini-2.5-flash-preview-tts';
+      'gemini-3.8-flash-lite-tts';
 
     // Default to 'Charon' (mature, articulate, sophisticated male vocal profile)
     this.voiceName =

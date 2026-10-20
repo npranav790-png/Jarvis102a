@@ -124,7 +124,11 @@ describe('Prompt 4 End-to-End Integration Suite', () => {
     });
 
     assert.strictEqual(result.success, false);
-    assert.ok(result.error?.includes('Action with risk level HIGH was not approved') || result.error?.includes('APPROVAL_REJECTED'));
+    assert.ok(
+      result.error?.includes('Action with risk level HIGH was not approved') ||
+      result.error?.includes('requires human approval') ||
+      result.error?.includes('APPROVAL_REJECTED')
+    );
 
     // File must NOT have been deleted
     assert.strictEqual(fs.existsSync(path.join(testWorkspace, 'README.md')), true);

@@ -86,6 +86,10 @@ export function loadConfig(customEnvPath?: string, overrides: Partial<Record<str
       whisperPath: process.env.JARVIS_VOICE_WHISPER_PATH || undefined,
       piperPath: process.env.JARVIS_VOICE_PIPER_PATH || undefined,
     },
+    mcp: {
+      configPath: process.env.JARVIS_MCP_CONFIG_PATH || 'config/mcp_servers.json',
+      autoConnect: process.env.JARVIS_MCP_AUTO_CONNECT !== 'false',
+    },
     ...overrides,
   };
 

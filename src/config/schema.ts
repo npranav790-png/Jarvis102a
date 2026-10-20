@@ -104,6 +104,13 @@ export const ConfigSchema = z.object({
     maxSessionSeconds: 60,
     maxAudioSizeMb: 10,
   }),
+  mcp: z.object({
+    configPath: z.string().default('config/mcp_servers.json'),
+    autoConnect: z.boolean().default(true),
+  }).default({
+    configPath: 'config/mcp_servers.json',
+    autoConnect: true,
+  }),
 });
 
 export type JarvisConfig = z.infer<typeof ConfigSchema>;

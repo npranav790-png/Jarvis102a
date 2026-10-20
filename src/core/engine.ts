@@ -227,6 +227,12 @@ export class JarvisEngine {
     }
     this.toolSelector = new ToolSelector(this.toolRegistry);
     this.mcpRegistry = new MCPRegistry(this.toolRegistry, mcpRepo, this.eventBus);
+    if (this.config.mcp?.configPath) {
+      await this.mcpRegistry.loadFromConfigFile(
+        this.config.mcp.configPath,
+        this.config.mcp.autoConnect
+      );
+    }
 
     // 6. AI Providers & Zero-Cost Guard
     this.providerRegistry = new ProviderRegistry(

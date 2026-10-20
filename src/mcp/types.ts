@@ -1,6 +1,6 @@
 import { SecurityPermission, ActionCategory, RiskLevel } from '../security/types.js';
 
-export type MCPTransportType = 'STDIO' | 'IN_MEMORY';
+export type MCPTransportType = 'STDIO' | 'IN_MEMORY' | 'SSE' | 'HTTP';
 export type MCPTrustLevel = 'UNTRUSTED' | 'SANDBOXED' | 'TRUSTED';
 export type MCPConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'ERROR' | 'STARTING' | 'STOPPING';
 
@@ -8,7 +8,8 @@ export interface MCPServerConfig {
   id?: string;
   name: string;
   description?: string;
-  command: string;
+  command?: string;
+  url?: string;
   args?: string[];
   env?: Record<string, string>;
   transport?: MCPTransportType;
