@@ -211,8 +211,9 @@ export class JarvisEngine {
 
     // 4. Subsystem Managers
     this.projectManager = new ProjectManager(projectRepo, this.eventBus);
-    this.sessionManager = new SessionManager(sessionRepo, this.projectManager, this.eventBus);
+    this.sessionManager = new SessionManager(sessionRepo, this.projectManager, this.eventBus, this.messageRepo);
     this.taskManager = new TaskManager(taskRepo, this.eventBus);
+
 
     // 5. Tools & MCP Layer
     this.toolRegistry = new ToolRegistry(

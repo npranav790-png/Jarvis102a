@@ -352,7 +352,24 @@ export class SessionRepository {
       throw new DatabaseError(`Failed to update session activity: ${id}`, undefined, err as Error);
     }
   }
+
+  public updateStatus(id: string, status: string): void {
+    try {
+      this.db.prepare('UPDATE sessions SET status = ?, last_active_at = ? WHERE id = ?').run(status, new Date().toISOString(), id);
+    } catch (err) {
+      throw new DatabaseError(`Failed to update session status: ${id}`, undefined, err as Error);
+    }
+  }
+
+  public delete(id: string): void {
+    try {
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+    } catch (err) {
+      throw new DatabaseError(`Failed to delete session: ${id}`, undefined, err as Error);
+    }
+  }
 }
+
 
 export class MessageRepository {
   constructor(private db: DatabaseSync) {}

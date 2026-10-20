@@ -1,4 +1,4 @@
-export type SessionStatus = 'ACTIVE' | 'IDLE' | 'CLOSED';
+export type SessionStatus = 'ACTIVE' | 'IDLE' | 'CLOSED' | 'ARCHIVED';
 
 export interface Session {
   id: string;

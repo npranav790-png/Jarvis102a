@@ -16,6 +16,7 @@ import { MemoryController } from './controllers/memory.js';
 import { ProvidersController } from './controllers/providers.js';
 import { OrchestratorController } from './controllers/orchestrator.js';
 import { MCPController } from './controllers/mcp.js';
+import { SessionController } from './controllers/sessions.js';
 
 export function setupRoutes(runtime: JarvisRuntime): Router {
   const router = Router();
@@ -24,7 +25,9 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   // Controllers
   const auth = new AuthController(runtime);
   const runtimeCtrl = new RuntimeController(runtime);
+  const sessionsCtrl = new SessionController(runtime);
   const tasks = new TasksController(runtime);
+
   const jobs = new JobsController(runtime);
   const approvals = new ApprovalsController(runtime);
   const automations = new AutomationsController(runtime);
@@ -67,7 +70,16 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   router.get('/database/backups', runtimeCtrl.listBackups);
   router.post('/database/restore', runtimeCtrl.restoreBackup);
 
+  // Sessions, Multi-Turn Archival & Export
+  router.get('/sessions', sessionsCtrl.list);
+  router.post('/sessions', sessionsCtrl.create);
+  router.get('/sessions/:id', sessionsCtrl.get);
+  router.post('/sessions/:id/archive', sessionsCtrl.archive);
+  router.post('/sessions/:id/unarchive', sessionsCtrl.unarchive);
+  router.get('/sessions/:id/export', sessionsCtrl.export);
+
   // Chat (MODERATE RATE LIMITING)
+
   const chatLimiter = rateLimit('chat', RateLimits.MODERATE);
   router.post('/chat', chatLimiter, chat.processMessage);
   router.post('/chat/stream', chatLimiter, chat.processMessageStream);

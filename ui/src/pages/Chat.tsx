@@ -16,7 +16,10 @@ import {
   ChevronDown,
   ChevronRight,
   Play,
+  Download,
+  Archive,
 } from 'lucide-react';
+
 import { api } from '../api/client';
 import { Link } from 'react-router-dom';
 import { VoiceControl } from '../components/Voice/VoiceControl';
@@ -299,7 +302,89 @@ export const Chat: React.FC = () => {
     }
   };
 
+  const handleExportSession = async () => {
+    try {
+      const sessionsRes = await api.get('/sessions');
+      const sessionsList = Array.isArray(sessionsRes?.data) ? sessionsRes.data : (Array.isArray(sessionsRes) ? sessionsRes : []);
+      const activeSession = sessionsList.find((s: any) => s.status === 'ACTIVE') || sessionsList[0];
+
+      let markdown = '';
+      let fileName = `jarvis_session_${new Date().toISOString().slice(0, 10)}.md`;
+
+      if (activeSession) {
+        try {
+          const expRes = await api.get(`/sessions/${activeSession.id}/export?format=markdown`);
+          if (expRes?.markdown) {
+            markdown = expRes.markdown;
+            if (expRes.fileName) fileName = expRes.fileName;
+          } else if (typeof expRes === 'string') {
+            markdown = expRes;
+          }
+        } catch {
+          // Fall back to building markdown from store messages
+        }
+      }
+
+      if (!markdown || markdown.trim().length === 0) {
+        const now = new Date();
+        markdown = `# 📜 JARVIS 2.0 Session Report\n\n`;
+        markdown += `| Attribute | Details |\n| :--- | :--- |\n`;
+        markdown += `| **Exported** | ${now.toLocaleString()} |\n`;
+        markdown += `| **Total Turns** | ${messages.length} |\n`;
+        markdown += `| **System** | JARVIS 2.0 Autonomous AI Operating System |\n\n---\n\n`;
+        markdown += `## 💬 Conversation Transcript\n\n`;
+        for (const m of messages) {
+          const roleLabel = m.role === 'user' ? '👤 User' : '🤖 JARVIS';
+          const time = m.timestamp ? new Date(m.timestamp).toLocaleTimeString() : '';
+          markdown += `### ${roleLabel} ${time ? `• ${time}` : ''}\n\n`;
+          markdown += `${(m.content || '').trim()}\n\n---\n\n`;
+        }
+      }
+
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      voicePlayer.speak('Session report exported.');
+    } catch (err: any) {
+      alert(`Export failed: ${err?.message || err}`);
+    }
+  };
+
+  const handleArchiveSession = async () => {
+    if (!confirm('Archive current session? This will save the conversation to archives and start a fresh session.')) return;
+    try {
+      const sessionsRes = await api.get('/sessions');
+      const sessionsList = Array.isArray(sessionsRes?.data) ? sessionsRes.data : (Array.isArray(sessionsRes) ? sessionsRes : []);
+      const activeSession = sessionsList.find((s: any) => s.status === 'ACTIVE');
+
+      if (activeSession) {
+        await api.post(`/sessions/${activeSession.id}/archive`);
+      }
+
+      await api.post('/sessions', { title: `Session ${new Date().toISOString().slice(0, 10)}` });
+
+      addMessage({
+        id: Date.now().toString(),
+        role: 'jarvis',
+        content: `📁 **Session Archived:** Previous session saved to disk archives. Ready for new instructions, Sir.`,
+        timestamp: new Date().toISOString(),
+      });
+
+      voicePlayer.speak('Session archived.');
+    } catch (err: any) {
+      alert(`Archive failed: ${err?.message || err}`);
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
+
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
@@ -538,8 +623,67 @@ export const Chat: React.FC = () => {
             >
               Orchestrator <ExternalLink size={11} />
             </Link>
+
+            <button
+              onClick={handleExportSession}
+              title="Export session transcript to Markdown report"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-muted)',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--accent-primary, #00f0ff)';
+                e.currentTarget.style.color = 'var(--accent-primary, #00f0ff)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                e.currentTarget.style.color = 'var(--text-muted)';
+              }}
+            >
+              <Download size={12} />
+              Export .md
+            </button>
+
+            <button
+              onClick={handleArchiveSession}
+              title="Archive current session and save to disk archives"
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-muted)',
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--accent-primary, #00f0ff)';
+                e.currentTarget.style.color = 'var(--accent-primary, #00f0ff)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                e.currentTarget.style.color = 'var(--text-muted)';
+              }}
+            >
+              <Archive size={12} />
+              Archive
+            </button>
           </div>
         </div>
+
 
         <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '16px 0' }}>
           {messages.length === 0 ? (
