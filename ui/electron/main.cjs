@@ -17,10 +17,8 @@ let backendProcess = null;
 // Function to check if backend is already listening
 function checkBackendAlive() {
   return new Promise((resolve) => {
-    const req = http.get('http://127.0.0.1:8787/api/v1/runtime/status', {
-      headers: { 'Authorization': 'Bearer dev_token_or_paired_token' }
-    }, (res) => {
-      resolve(res.statusCode === 200);
+    const req = http.get('http://127.0.0.1:8787/api/v1/health', (res) => {
+      resolve(res.statusCode === 200 || res.statusCode === 401);
     });
     req.on('error', () => resolve(false));
     req.setTimeout(800, () => {
@@ -44,12 +42,21 @@ async function ensureBackendRunning() {
     cwd: rootDir,
     detached: false,
     stdio: 'ignore',
-    windowsHide: true
+    windowsHide: true,
+    shell: process.platform === 'win32'
   });
 
   backendProcess.on('error', (err) => {
     console.error('Failed to start background backend:', err);
   });
+
+  // Wait briefly for backend server to bind to port 8787 before showing the UI
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    if (await checkBackendAlive()) {
+      break;
+    }
+  }
 }
 
 function createWindow() {

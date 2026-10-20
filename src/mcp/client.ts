@@ -69,10 +69,22 @@ export class MCPClient {
         ...this.config.env,
       });
 
-      this.process = spawn(this.config.command, this.config.args || [], {
+      const isWin = process.platform === 'win32';
+      let cmd = this.config.command;
+      if (isWin && (cmd === 'npx' || cmd === 'npm')) {
+        cmd = `${cmd}.cmd`;
+      }
+
+      this.process = spawn(cmd, this.config.args || [], {
         env: safeEnv,
         windowsHide: true,
+        shell: isWin,
         stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      this.process.on('error', (err) => {
+        this.status = 'ERROR';
+        logger.error(`MCP server '${this.config.name}' process error: ${err.message}`);
       });
 
       if (!this.process.pid) {
@@ -96,11 +108,6 @@ export class MCPClient {
       this.process.on('close', () => {
         this.status = 'DISCONNECTED';
         logger.warn(`MCP server '${this.config.name}' process exited.`);
-      });
-
-      this.process.on('error', (err) => {
-        this.status = 'ERROR';
-        logger.error(`MCP server '${this.config.name}' error:`, undefined, err);
       });
 
       // Send initialize handshake

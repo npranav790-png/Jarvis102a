@@ -106,10 +106,10 @@ export const ConfigSchema = z.object({
   }),
   mcp: z.object({
     configPath: z.string().default('config/mcp_servers.json'),
-    autoConnect: z.boolean().default(true),
+    autoConnect: z.boolean().default(false),
   }).default({
     configPath: 'config/mcp_servers.json',
-    autoConnect: true,
+    autoConnect: false,
   }),
 });
 
