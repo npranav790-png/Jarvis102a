@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Monitor, Wifi, Camera, Zap, ExternalLink, RefreshCw, Key, Volume2 } from 'lucide-react';
+import { Settings as SettingsIcon, Monitor, Wifi, Camera, Zap, ExternalLink, RefreshCw, Key, Volume2, Server } from 'lucide-react';
 import { useJarvisStore } from '../store/jarvisStore';
 import { api } from '../api/client';
 
@@ -24,6 +24,11 @@ export const Settings: React.FC = () => {
   const [testingTts, setTestingTts] = useState(false);
   const [ttsFeedback, setTtsFeedback] = useState<string | null>(null);
 
+  // MCP Servers State
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpActionInProgress, setMcpActionInProgress] = useState<string | null>(null);
+
   const fetchProviders = async () => {
     try {
       const res = await api.get('/providers');
@@ -46,6 +51,20 @@ export const Settings: React.FC = () => {
     }
   };
 
+  const fetchMcpServers = async () => {
+    setMcpLoading(true);
+    try {
+      const res = await api.get('/mcp/servers');
+      if (res?.servers) {
+        setMcpServers(res.servers);
+      }
+    } catch (err) {
+      console.error('Failed to load MCP servers', err);
+    } finally {
+      setMcpLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'AI_PROVIDERS') {
       fetchProviders();
@@ -53,7 +72,43 @@ export const Settings: React.FC = () => {
     if (activeTab === 'VOICE') {
       fetchVoiceStatus();
     }
+    if (activeTab === 'MCP_SERVERS') {
+      fetchMcpServers();
+    }
   }, [activeTab]);
+
+  const handleConnectMcp = async (name: string) => {
+    setMcpActionInProgress(name);
+    try {
+      await api.post(`/mcp/servers/${encodeURIComponent(name)}/connect`, {});
+      await fetchMcpServers();
+    } catch (err: any) {
+      alert(`Connect failed: ${err.message}`);
+    } finally {
+      setMcpActionInProgress(null);
+    }
+  };
+
+  const handleDisconnectMcp = async (name: string) => {
+    setMcpActionInProgress(name);
+    try {
+      await api.post(`/mcp/servers/${encodeURIComponent(name)}/disconnect`, {});
+      await fetchMcpServers();
+    } catch (err: any) {
+      alert(`Disconnect failed: ${err.message}`);
+    } finally {
+      setMcpActionInProgress(null);
+    }
+  };
+
+  const handleToggleMcp = async (name: string, currentEnabled: boolean) => {
+    try {
+      await api.post(`/mcp/servers/${encodeURIComponent(name)}/toggle`, { enabled: !currentEnabled });
+      await fetchMcpServers();
+    } catch (err: any) {
+      alert(`Toggle failed: ${err.message}`);
+    }
+  };
 
   const handleTestTts = async () => {
     setTestingTts(true);
@@ -129,6 +184,7 @@ export const Settings: React.FC = () => {
             { id: 'GENERAL', label: 'GENERAL' },
             { id: 'VOICE', label: 'VOICE & AUDIO' },
             { id: 'AI_PROVIDERS', label: 'AI PROVIDERS' },
+            { id: 'MCP_SERVERS', label: 'MCP ECOSYSTEM' },
             { id: 'APPEARANCE', label: 'APPEARANCE' },
             { id: 'GESTURES', label: 'GESTURES' },
             { id: 'CONNECTION', label: 'CONNECTION' },
@@ -599,6 +655,113 @@ export const Settings: React.FC = () => {
                   </div>
                   <div className="font-mono text-muted" style={{ fontSize: '0.8rem' }}>LOCKED</div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'MCP_SERVERS' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 className="font-mono text-cyan" style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Server size={16} /> MODEL CONTEXT PROTOCOL (MCP) ECOSYSTEM
+                  </h3>
+                  <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+                    Plug-and-play external MCP servers (GitHub, Brave Search, SQLite) for real-time tool execution.
+                  </div>
+                </div>
+                <button
+                  onClick={fetchMcpServers}
+                  className="btn"
+                  disabled={mcpLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '0.75rem' }}
+                >
+                  <RefreshCw size={12} className={mcpLoading ? 'animate-spin' : ''} /> REFRESH SERVERS
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                {mcpServers.map((server) => {
+                  const isConnected = server.status === 'CONNECTED';
+                  const inProgress = mcpActionInProgress === server.name;
+
+                  return (
+                    <div
+                      key={server.name}
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        padding: '18px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span className="font-mono" style={{ fontWeight: 600, fontSize: '0.95rem' }}>{server.name}</span>
+                          <span
+                            style={{
+                              fontSize: '0.7rem',
+                              fontFamily: 'var(--font-mono)',
+                              padding: '2px 8px',
+                              borderRadius: '3px',
+                              background: isConnected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(156, 163, 175, 0.15)',
+                              color: isConnected ? '#10b981' : 'var(--text-muted)',
+                              border: `1px solid ${isConnected ? '#10b981' : 'var(--border-subtle)'}`,
+                            }}
+                          >
+                            {server.status}
+                          </span>
+                        </div>
+                        <div className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>
+                          {server.description || 'Configured Model Context Protocol endpoint.'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', display: 'flex', gap: '12px', color: 'var(--text-muted)' }}>
+                          <span>Transport: <strong className="text-cyan font-mono">{server.transport}</strong></span>
+                          <span>Trust: <strong className="font-mono">{server.trustLevel}</strong></span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+                        <button
+                          onClick={() => isConnected ? handleDisconnectMcp(server.name) : handleConnectMcp(server.name)}
+                          disabled={inProgress}
+                          style={{
+                            flex: 1,
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)',
+                            background: isConnected ? 'rgba(239, 68, 68, 0.15)' : 'var(--accent-cyan)',
+                            color: isConnected ? '#ef4444' : '#000',
+                            border: `1px solid ${isConnected ? '#ef4444' : 'transparent'}`,
+                            cursor: inProgress ? 'wait' : 'pointer',
+                          }}
+                        >
+                          {inProgress ? 'PROCESSING...' : isConnected ? 'DISCONNECT' : 'CONNECT'}
+                        </button>
+                        <button
+                          onClick={() => handleToggleMcp(server.name, server.enabled)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)',
+                            background: 'var(--bg-secondary)',
+                            color: server.enabled ? 'var(--accent-cyan)' : 'var(--text-muted)',
+                            border: '1px solid var(--border-subtle)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {server.enabled ? 'ENABLED' : 'DISABLED'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

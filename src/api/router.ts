@@ -15,6 +15,7 @@ import { VoiceController } from './controllers/voice.js';
 import { MemoryController } from './controllers/memory.js';
 import { ProvidersController } from './controllers/providers.js';
 import { OrchestratorController } from './controllers/orchestrator.js';
+import { MCPController } from './controllers/mcp.js';
 
 export function setupRoutes(runtime: JarvisRuntime): Router {
   const router = Router();
@@ -34,6 +35,7 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   const memoryCtrl = new MemoryController(runtime);
   const providersCtrl = new ProvidersController(runtime);
   const orchestrator = new OrchestratorController(runtime);
+  const mcp = new MCPController(runtime);
 
   // Health - Public
   router.get('/health', runtimeCtrl.health);
@@ -136,6 +138,15 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   router.post('/orchestrator/jobs/:id/reject', orchestrator.rejectJob);
   router.post('/orchestrator/jobs/:id/edit-prompt', orchestrator.updatePrompt);
   router.post('/orchestrator/jobs/:id/cancel', orchestrator.cancelJob);
+  router.post('/orchestrator/jobs/:id/phase/:phaseNumber', orchestrator.executePhase);
+  router.post('/orchestrator/jobs/:id/self-heal', orchestrator.selfHeal);
+  router.post('/orchestrator/jobs/:id/rollback', orchestrator.rollback);
+
+  // MCP Servers Ecosystem
+  router.get('/mcp/servers', mcp.list);
+  router.post('/mcp/servers/:name/connect', mcp.connect);
+  router.post('/mcp/servers/:name/disconnect', mcp.disconnect);
+  router.post('/mcp/servers/:name/toggle', mcp.toggle);
 
   return router;
 }

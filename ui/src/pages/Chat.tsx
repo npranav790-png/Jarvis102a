@@ -95,7 +95,7 @@ export const Chat: React.FC = () => {
         }
       }
     });
-  }, []);
+  }, [setPendingApprovals]);
 
   // Listen to WebSocket events for real-time live terminal streaming & approvals
   useEffect(() => {
@@ -194,7 +194,7 @@ export const Chat: React.FC = () => {
       }
     });
     return unsub;
-  }, []);
+  }, [setPendingApprovals]);
 
   // Handle Human Approval decisions directly from chat
   const handleApproveAction = async (approvalId: string) => {
@@ -552,7 +552,7 @@ export const Chat: React.FC = () => {
               .map((m: any) => {
                 const content = typeof m.content === 'string' ? m.content : (m.payload?.content || '');
                 const role = m.role || m.payload?.role || 'jarvis';
-                const timestamp = m.timestamp || m.payload?.timestamp || new Date().toISOString();
+                const timestamp = m.timestamp || m.payload?.timestamp || '';
                 const taskId = m.taskId || m.payload?.taskId;
                 const showTaskCard = m.showTaskCard || false;
                 const isError = typeof content === 'string' && content.includes('ERROR:');
@@ -566,7 +566,7 @@ export const Chat: React.FC = () => {
                     }}
                   >
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px', fontFamily: 'var(--font-mono)', textAlign: role === 'user' ? 'right' : 'left' }}>
-                      {role === 'user' ? 'USER' : 'JARVIS'} // {new Date(timestamp).toLocaleTimeString()}
+                      {role === 'user' ? 'USER' : 'JARVIS'} {timestamp ? `// ${new Date(timestamp).toLocaleTimeString()}` : ''}
                     </div>
                     <div
                       style={{

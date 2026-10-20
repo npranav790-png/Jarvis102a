@@ -143,4 +143,40 @@ export class OrchestratorController {
       res.status(500).json({ success: false, error: err.message });
     }
   };
+
+  public executePhase = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = String(req.params.id);
+      const phaseNumber = parseInt(String(req.params.phaseNumber), 10);
+      const job = await this.runtime.orchestrator.executePhase(id, phaseNumber);
+      res.json({ success: true, data: job });
+    } catch (err: any) {
+      logger.error(`Failed to execute phase for job ${req.params.id}: ${err.message}`);
+      res.status(400).json({ success: false, error: err.message });
+    }
+  };
+
+  public selfHeal = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = String(req.params.id);
+      const { error } = req.body;
+      const result = await this.runtime.orchestrator.selfHeal(id, error || 'Verification test suite failed');
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      logger.error(`Failed to self-heal job ${req.params.id}: ${err.message}`);
+      res.status(400).json({ success: false, error: err.message });
+    }
+  };
+
+  public rollback = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = String(req.params.id);
+      const targetPhase = req.body?.targetPhase ? parseInt(String(req.body.targetPhase), 10) : undefined;
+      const result = await this.runtime.orchestrator.rollbackJob(id, targetPhase);
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      logger.error(`Failed to rollback job ${req.params.id}: ${err.message}`);
+      res.status(400).json({ success: false, error: err.message });
+    }
+  };
 }

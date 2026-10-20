@@ -125,6 +125,14 @@ export interface OrchestrationJob {
   approvalId?: string;
   approvalStatus: 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED';
   rejectionReason?: string;
+  currentPhase?: number;
+  completedPhases?: number[];
+  phaseResults?: Record<number, { status: 'SUCCESS' | 'FAILED'; logs: string[]; error?: string }>;
+  selfHealAttempts?: number;
+  maxSelfHealAttempts?: number;
+  rollbackStatus?: 'NONE' | 'AVAILABLE' | 'ROLLED_BACK';
+  initialGitCommit?: string;
+  phaseGitCommits?: Record<number, string>;
   executionLogs: ExecutionLogChunk[];
   exitCode?: number;
   diff?: SolutionDiff;

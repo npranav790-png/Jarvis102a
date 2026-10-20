@@ -3,6 +3,8 @@ export * from './shell.js';
 export * from './git.js';
 export * from './process.js';
 export * from './code-test.js';
+export * from './web-search.js';
+export * from './github.js';
 
 import {
   filesystemListTool,
@@ -25,6 +27,8 @@ import {
 } from './git.js';
 import { processStartTool, processStatusTool, processStopTool } from './process.js';
 import { codeTestTool } from './code-test.js';
+import { webSearchTool } from './web-search.js';
+import { githubSearchTool } from './github.js';
 import { ITool } from '../types.js';
 
 export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
@@ -47,4 +51,6 @@ export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
   processStatusTool,
   processStopTool,
   codeTestTool,
+  webSearchTool,
+  githubSearchTool,
 ];

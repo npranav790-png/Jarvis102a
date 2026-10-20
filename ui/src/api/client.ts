@@ -28,7 +28,7 @@ class ApiClient {
     }
   }
 
-  async post(path: string, body: any) {
+  async post(path: string, body: any = {}) {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',

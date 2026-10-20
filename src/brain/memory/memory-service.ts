@@ -13,6 +13,7 @@ import {
 } from '../types.js';
 import { MemorySanitizer } from './sanitizer.js';
 import { MemoryRetrievalRanker, RankedMemory } from './retrieval.js';
+import { EmbeddingService } from './embeddings.js';
 import { rootLogger } from '../../logging/logger.js';
 
 const logger = rootLogger.child('MemoryService');
@@ -36,10 +37,15 @@ export interface CreateMemoryInput {
 }
 
 export class MemoryService {
+  private embeddingService: EmbeddingService;
+
   constructor(
     private memoryRepo: MemoryRepository,
-    private eventBus: EventBus
-  ) {}
+    private eventBus: EventBus,
+    embeddingService?: EmbeddingService
+  ) {
+    this.embeddingService = embeddingService || new EmbeddingService();
+  }
 
   /**
    * Persists a new memory after secret sanitization, deduplication, and conflict checks.
@@ -96,13 +102,22 @@ export class MemoryService {
     const now = new Date().toISOString();
     const id = `mem_${crypto.randomUUID().slice(0, 8)}`;
     
+    let embedding = input.embedding;
+    if (!embedding) {
+      try {
+        embedding = await this.embeddingService.generateEmbedding(`${subject} ${input.content} ${summary}`);
+      } catch (err: any) {
+        logger.debug(`Could not generate embedding for memory: ${err.message}`);
+      }
+    }
+
     const combinedMetadata: Record<string, unknown> = {
       ...(input.metadata || {}),
       verificationState: input.verificationState,
       containsSecrets: input.containsSecrets,
     };
-    if (input.embedding) {
-      combinedMetadata.embedding = input.embedding;
+    if (embedding) {
+      combinedMetadata.embedding = embedding;
     }
     
     const record: MemoryRecord = {
@@ -232,8 +247,17 @@ export class MemoryService {
       limit: 100,
     });
 
+    let queryEmbedding = options?.queryEmbedding;
+    if (!queryEmbedding && query.trim().length > 0) {
+      try {
+        queryEmbedding = await this.embeddingService.generateEmbedding(query);
+      } catch {
+        // Fall back to lexical ranking
+      }
+    }
+
     // If semantic queryEmbedding is provided or keyword search returned no candidates, load active memories for semantic ranking
-    if (options?.queryEmbedding || raw.length === 0) {
+    if (queryEmbedding || raw.length === 0) {
       const allActive = this.memoryRepo.list({
         projectId: options?.targetProjectId,
         type: options?.type,
@@ -255,7 +279,7 @@ export class MemoryService {
     const ranked = MemoryRetrievalRanker.rank(query, items, {
       targetProjectId: options?.targetProjectId,
       maxResults: options?.maxResults ?? 15,
-      queryEmbedding: options?.queryEmbedding,
+      queryEmbedding,
     });
 
     if (ranked.length > 0) {

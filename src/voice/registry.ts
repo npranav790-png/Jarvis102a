@@ -18,6 +18,7 @@ import { OpenWakeWordDetector } from './providers/open-wakeword.js';
 import { MockSTTProvider, MockTTSProvider } from './providers/mock.js';
 import { GeminiTTSProvider } from './providers/gemini-tts.js';
 import { GeminiSTTProvider } from './providers/gemini-stt.js';
+import { GeminiLiveProvider } from './providers/gemini-live.js';
 import { VoiceCache } from './cache.js';
 
 const logger = rootLogger.child('VoiceRegistry');
@@ -89,7 +90,15 @@ export class VoiceRegistry {
     const wakeDetector = new OpenWakeWordDetector('hey jarvis');
     this.registerWakeWord(wakeDetector);
 
-    // 8. Select active providers based on config and availability
+    // 8. Gemini Live Realtime Streaming Provider (Zero-cost free-tier)
+    const geminiLive = new GeminiLiveProvider({
+      apiKey: config.providers.geminiApiKey,
+      model: config.voice.geminiTtsModel?.includes('live') ? config.voice.geminiTtsModel : 'gemini-3.8-live',
+      voiceName: config.voice.geminiVoice,
+    });
+    this.registerRealtimeVoice(geminiLive);
+
+    // 9. Select active providers based on config and availability
     await this.selectActiveProviders(config);
   }
 

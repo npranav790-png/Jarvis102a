@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Terminal,
   CheckCircle,
@@ -123,7 +123,7 @@ export const Orchestrator: React.FC = () => {
   const terminalRef = useRef<HTMLDivElement>(null);
 
   // Load status and jobs
-  const fetchStatusAndJobs = async () => {
+  const fetchStatusAndJobs = useCallback(async () => {
     try {
       const statusRes = await api.get('/orchestrator/status');
       if (statusRes?.data) {
@@ -136,14 +136,12 @@ export const Orchestrator: React.FC = () => {
       const jobsRes = await api.get('/orchestrator/jobs');
       if (jobsRes?.data && Array.isArray(jobsRes.data)) {
         setJobs(jobsRes.data);
-        if (jobsRes.data.length > 0 && !activeJob) {
-          setActiveJob(jobsRes.data[0]);
-        }
+        setActiveJob((prev) => (!prev && jobsRes.data.length > 0 ? jobsRes.data[0] : prev));
       }
     } catch (err) {
       console.error('Failed to load orchestrator data:', err);
     }
-  };
+  }, [selectedEngine]);
 
   // Real-time WebSocket log streaming
   useEffect(() => {
@@ -175,13 +173,13 @@ export const Orchestrator: React.FC = () => {
     });
 
     return unsub;
-  }, []);
+  }, [fetchStatusAndJobs]);
 
   useEffect(() => {
     fetchStatusAndJobs();
     const interval = setInterval(fetchStatusAndJobs, 3000);
     return () => clearInterval(interval);
-  }, [activeJob?.id]);
+  }, [fetchStatusAndJobs, activeJob?.id]);
 
   // Keep active job updated from list
   useEffect(() => {
@@ -191,7 +189,7 @@ export const Orchestrator: React.FC = () => {
         setActiveJob(updated);
       }
     }
-  }, [jobs]);
+  }, [jobs, activeJob]);
 
   // Auto-scroll terminal
   useEffect(() => {
