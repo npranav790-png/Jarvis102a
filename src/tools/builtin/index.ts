@@ -5,6 +5,7 @@ export * from './process.js';
 export * from './code-test.js';
 export * from './web-search.js';
 export * from './github.js';
+export * from './screen-capture.js';
 
 import {
   filesystemListTool,
@@ -29,6 +30,7 @@ import { processStartTool, processStatusTool, processStopTool } from './process.
 import { codeTestTool } from './code-test.js';
 import { webSearchTool } from './web-search.js';
 import { githubSearchTool } from './github.js';
+import { screenCaptureTool } from './screen-capture.js';
 import { ITool } from '../types.js';
 
 export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
@@ -53,4 +55,5 @@ export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
   codeTestTool,
   webSearchTool,
   githubSearchTool,
+  screenCaptureTool,
 ];

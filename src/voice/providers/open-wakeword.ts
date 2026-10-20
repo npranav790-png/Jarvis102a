@@ -13,8 +13,7 @@ export class OpenWakeWordDetector implements WakeWordDetector {
   }
 
   public async isAvailable(): Promise<boolean> {
-    // Phase 1: Wake word is marked optional and evaluated cleanly
-    return false;
+    return true;
   }
 
   public async start(): Promise<void> {

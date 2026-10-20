@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, Tray, Menu, nativeImage, globalShortcut } = require('electron');
 const path = require('node:path');
 const http = require('node:http');
 const { spawn } = require('node:child_process');
@@ -13,6 +13,19 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
 let mainWindow = null;
 let backendProcess = null;
+let tray = null;
+app.isQuitting = false;
+
+// Create crisp 32x32 Holographic Cyan Core Tray Icon
+function createTrayIcon() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="14" fill="#04070a" stroke="#00e5ff" stroke-width="2.5"/>
+    <circle cx="16" cy="16" r="8" fill="#00e5ff" fill-opacity="0.35" stroke="#00e5ff" stroke-width="1.5"/>
+    <circle cx="16" cy="16" r="3.5" fill="#ffffff"/>
+  </svg>`;
+  const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  return nativeImage.createFromDataURL(dataUrl);
+}
 
 // Function to check if backend is already listening
 function checkBackendAlive() {
@@ -59,6 +72,76 @@ async function ensureBackendRunning() {
   }
 }
 
+// Toggle or bring forward JARVIS HUD window instantly
+function toggleMainWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isVisible()) {
+    if (mainWindow.isFocused()) {
+      mainWindow.hide();
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+function setupTray() {
+  if (tray) return;
+  const icon = createTrayIcon();
+  tray = new Tray(icon);
+  tray.setToolTip('JARVIS 2.0 — Orchestrator Studio');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open JARVIS 2.0 (Alt+J)',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
+        }
+      }
+    },
+    {
+      label: 'Toggle HUD Window',
+      click: toggleMainWindow
+    },
+    { type: 'separator' },
+    {
+      label: 'Core Status: Active (127.0.0.1:8787)',
+      enabled: false
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit JARVIS',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.on('double-click', toggleMainWindow);
+  tray.on('click', toggleMainWindow);
+}
+
+function registerGlobalShortcuts() {
+  try {
+    globalShortcut.register('Alt+J', toggleMainWindow);
+    globalShortcut.register('CommandOrControl+Alt+Space', toggleMainWindow);
+  } catch (err) {
+    console.warn('Global shortcut registration skipped:', err);
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -94,6 +177,14 @@ function createWindow() {
     return { action: 'allow' };
   });
 
+  // Minimize to tray on close unless quitting
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -108,6 +199,7 @@ if (!gotTheLock) {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
     }
   });
@@ -115,6 +207,8 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     await ensureBackendRunning();
     createWindow();
+    setupTray();
+    registerGlobalShortcuts();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -122,19 +216,26 @@ if (!gotTheLock) {
   });
 }
 
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+});
+
 app.on('window-all-closed', () => {
-  if (backendProcess) {
-    try {
-      backendProcess.kill();
-    } catch {}
-    backendProcess = null;
-  }
-  if (process.platform !== 'darwin') {
-    app.quit();
+  if (app.isQuitting) {
+    if (backendProcess) {
+      try {
+        backendProcess.kill();
+      } catch {}
+      backendProcess = null;
+    }
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
   }
 });
 
 app.on('before-quit', () => {
+  app.isQuitting = true;
   if (backendProcess) {
     try {
       backendProcess.kill();

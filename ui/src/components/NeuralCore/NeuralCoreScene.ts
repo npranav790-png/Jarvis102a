@@ -125,11 +125,14 @@ export class NeuralCoreScene {
     const targetProfile = getStateVisualProfile(this.state);
     this.currentProfile = targetProfile;
 
-    // Fetch live audio amplitude (from voice playback or microphone)
-    let audioAmp = audioAnalyzer.getAmplitude();
-    if (this.state !== 'SPEAKING' && this.state !== 'LISTENING') {
+    // Fetch live audio frequency spectrum (from voice playback or microphone)
+    const spectrum = audioAnalyzer.getSpectrum();
+    let audioAmp = spectrum.amplitude;
+    if (audioAmp < 0.01 && this.state !== 'SPEAKING' && this.state !== 'LISTENING') {
       audioAmp = 0;
     }
+    const audioBass = audioAmp > 0 ? spectrum.bass : 0;
+    const audioMid = audioAmp > 0 ? spectrum.mid : 0;
 
     // Apply interactive rotation to Orb Root
     this.orbRoot.rotation.x = this.interaction.rotX;
@@ -143,15 +146,15 @@ export class NeuralCoreScene {
     this.camera.position.y = -this.interaction.parallaxY;
     this.camera.lookAt(0, 0, 0);
 
-    // Update all layers
+    // Update all layers with real-time frequency spectrum reactivity
     this.coreGeometry.update(this.time, this.currentProfile, audioAmp, this.reducedMotion);
     this.outerShell.update(this.time, this.currentProfile, this.reducedMotion);
-    this.orbitalRings.update(this.time, this.currentProfile, this.reducedMotion);
+    this.orbitalRings.update(this.time, this.currentProfile, this.reducedMotion, audioMid);
     this.energyArcs.update(this.time, this.currentProfile, audioAmp, this.reducedMotion);
     this.glyphField.update(this.time, this.currentProfile, this.reducedMotion);
     this.particleField.update(this.time, this.currentProfile, audioAmp, this.reducedMotion);
     this.debrisField.update(this.time, this.currentProfile, this.reducedMotion);
-    this.scanRings.update(this.time, this.currentProfile, this.reducedMotion);
+    this.scanRings.update(this.time, this.currentProfile, this.reducedMotion, audioBass);
 
     // Render via post-processing (or direct fallback)
     this.postProcessing.render();

@@ -32,4 +32,18 @@ export class RuntimeController {
       next(err);
     }
   };
+
+  public captureScreen = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const tool = this.runtime.engine.toolRegistry.get('desktop_screen_capture');
+      if (!tool) {
+        res.status(404).json({ error: 'Screen capture tool not found' });
+        return;
+      }
+      const result = await tool.execute(req.body || {}, { actor: 'api' });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
 }

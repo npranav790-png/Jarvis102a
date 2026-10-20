@@ -58,6 +58,7 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
 
   // Runtime
   router.get('/runtime/status', runtimeCtrl.status);
+  router.post('/runtime/screen', runtimeCtrl.captureScreen);
 
   // Chat (MODERATE RATE LIMITING)
   const chatLimiter = rateLimit('chat', RateLimits.MODERATE);
@@ -115,6 +116,7 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   router.post('/voice/sessions/:id/finish', voice.finishSession);
   router.post('/voice/sessions/:id/interrupt', voice.interruptSession);
   router.post('/voice/sessions/:id/cancel', voice.cancelSession);
+  router.post('/voice/wakeword/toggle', voice.toggleWakeWord);
 
   // Memory Explorer
   router.get('/memory', memoryCtrl.list);

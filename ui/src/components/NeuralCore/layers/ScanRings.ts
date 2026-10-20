@@ -77,11 +77,12 @@ export class ScanRings {
     }
   }
 
-  public update(time: number, profile: StateVisualProfile, reducedMotion: boolean) {
+  public update(time: number, profile: StateVisualProfile, reducedMotion: boolean, audioBass = 0) {
     if (reducedMotion) return;
 
-    // Periodic trigger check
-    if (time - this.lastTriggerTime > profile.scanInterval) {
+    // Periodic trigger check or audio bass surge trigger
+    const interval = audioBass > 0.35 ? profile.scanInterval * 0.45 : profile.scanInterval;
+    if (time - this.lastTriggerTime > interval) {
       this.lastTriggerTime = time;
       this.triggerScan();
     }

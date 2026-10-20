@@ -159,21 +159,24 @@ export class OrbitalRings {
     });
   }
 
-  public update(time: number, profile: StateVisualProfile, reducedMotion: boolean) {
-    const speedMult = reducedMotion ? profile.ringSpeedMult * 0.15 : profile.ringSpeedMult;
+  public update(time: number, profile: StateVisualProfile, reducedMotion: boolean, audioMid = 0) {
+    const speedMult = reducedMotion
+      ? profile.ringSpeedMult * 0.15
+      : profile.ringSpeedMult * (1.0 + audioMid * 0.75);
 
     this.layers.forEach((layer, idx) => {
       // Local axis rotation (clockwise / counter-clockwise)
       layer.group.rotateOnAxis(layer.rotationAxis, layer.baseSpeed * speedMult);
 
-      // Subtle dynamic breathing in response to high energy states
+      // Subtle dynamic breathing in response to high energy states and audio voice frequencies
       if (!reducedMotion) {
-        const pulse = 1.0 + Math.sin(time * profile.pulseFrequency + idx) * (profile.pulseAmplitude * 0.25);
+        const voicePulse = audioMid * 0.08;
+        const pulse = 1.0 + Math.sin(time * profile.pulseFrequency + idx) * (profile.pulseAmplitude * 0.25) + voicePulse;
         layer.group.scale.set(pulse, pulse, pulse);
 
         layer.arcs.forEach(a => {
-          const dynamicOpacity = a.baseOpacity * (0.8 + 0.2 * Math.sin(time * 3 + idx)) * (profile.coreBrightness > 1.2 ? 1.2 : 1.0);
-          (a.line.material as THREE.LineBasicMaterial).opacity = Math.max(0.1, Math.min(0.95, dynamicOpacity));
+          const dynamicOpacity = a.baseOpacity * (0.8 + 0.2 * Math.sin(time * 3 + idx) + audioMid * 0.4) * (profile.coreBrightness > 1.2 ? 1.2 : 1.0);
+          (a.line.material as THREE.LineBasicMaterial).opacity = Math.max(0.1, Math.min(0.98, dynamicOpacity));
         });
       }
     });

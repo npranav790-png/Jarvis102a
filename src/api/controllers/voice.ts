@@ -170,4 +170,16 @@ export class VoiceController {
       next(err);
     }
   };
+
+  public toggleWakeWord = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const enabled = Boolean(req.body?.enabled);
+      this.runtime.engine.config.voice.wakeWordEnabled = enabled;
+      await this.runtime.voiceRegistry.initializeFromConfig(this.runtime.engine.config);
+      const status = await this.runtime.voiceService.getStatus();
+      res.json({ success: true, wakeWord: status.wakeWord });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

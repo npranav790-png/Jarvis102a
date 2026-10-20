@@ -23,6 +23,24 @@ export const Settings: React.FC = () => {
   const [voiceStatus, setVoiceStatus] = useState<any>(null);
   const [testingTts, setTestingTts] = useState(false);
   const [ttsFeedback, setTtsFeedback] = useState<string | null>(null);
+  const [togglingWakeWord, setTogglingWakeWord] = useState(false);
+
+  const handleToggleWakeWord = async () => {
+    setTogglingWakeWord(true);
+    try {
+      const nextEnabled = !voiceStatus?.wakeWord?.enabled;
+      const res = await api.post('/voice/wakeword/toggle', { enabled: nextEnabled });
+      if (res?.wakeWord) {
+        setVoiceStatus((prev: any) => ({ ...prev, wakeWord: res.wakeWord }));
+      } else {
+        await fetchVoiceStatus();
+      }
+    } catch (e: any) {
+      alert(`Failed to toggle wake word: ${e.message}`);
+    } finally {
+      setTogglingWakeWord(false);
+    }
+  };
 
   // MCP Servers State
   const [mcpServers, setMcpServers] = useState<any[]>([]);
@@ -296,16 +314,36 @@ export const Settings: React.FC = () => {
                       fontFamily: 'var(--font-mono)', 
                       padding: '2px 8px', 
                       borderRadius: '3px',
-                      background: 'rgba(100, 116, 139, 0.15)',
-                      color: '#94a3b8',
-                      border: '1px solid #64748b'
+                      background: voiceStatus?.wakeWord?.status === 'READY' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.15)',
+                      color: voiceStatus?.wakeWord?.status === 'READY' ? '#10b981' : '#94a3b8',
+                      border: `1px solid ${voiceStatus?.wakeWord?.status === 'READY' ? '#10b981' : '#64748b'}`
                     }}>
                       {voiceStatus?.wakeWord?.status || 'DISABLED'}
                     </span>
                   </div>
                   <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>Keyword: "Hey Jarvis"</div>
-                  <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '4px' }}>
-                    Trigger: <span className="font-mono">Manual Mic Activation (Default)</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <div className="text-muted" style={{ fontSize: '0.75rem' }}>
+                      Trigger: <span className="font-mono text-cyan">{voiceStatus?.wakeWord?.enabled ? 'Voice Activation ("Hey Jarvis")' : 'Manual Mic Activation (Default)'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleWakeWord}
+                      disabled={togglingWakeWord}
+                      style={{
+                        padding: '3px 10px',
+                        fontSize: '0.7rem',
+                        borderRadius: '3px',
+                        border: '1px solid var(--accent-cyan)',
+                        background: voiceStatus?.wakeWord?.enabled ? 'var(--accent-cyan-dim)' : 'transparent',
+                        color: 'var(--accent-cyan)',
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-mono)',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {voiceStatus?.wakeWord?.enabled ? 'DISABLE' : 'ENABLE'}
+                    </button>
                   </div>
                 </div>
               </div>
