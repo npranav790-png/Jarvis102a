@@ -56,9 +56,16 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   router.get('/devices', auth.listDevices);
   router.post('/devices/:id/revoke', rateLimit('revoke_device', RateLimits.STRICT), auth.revokeDevice);
 
-  // Runtime
+  // Runtime & Desktop Awareness
   router.get('/runtime/status', runtimeCtrl.status);
   router.post('/runtime/screen', runtimeCtrl.captureScreen);
+  router.get('/runtime/telemetry', runtimeCtrl.getTelemetry);
+  router.post('/runtime/notify', runtimeCtrl.notify);
+
+  // Database Snapshots & Reliability
+  router.post('/database/backup', runtimeCtrl.createBackup);
+  router.get('/database/backups', runtimeCtrl.listBackups);
+  router.post('/database/restore', runtimeCtrl.restoreBackup);
 
   // Chat (MODERATE RATE LIMITING)
   const chatLimiter = rateLimit('chat', RateLimits.MODERATE);

@@ -911,9 +911,22 @@ export class MemoryRepository {
       const conditions: string[] = ["status != 'EXPIRED' AND status != 'ARCHIVED'"];
       const params: any[] = [];
 
-      conditions.push('(content LIKE ? OR summary LIKE ? OR subject LIKE ?)');
-      const wild = `%${query}%`;
-      params.push(wild, wild, wild);
+      const cleanQuery = query.trim();
+      const tokens = cleanQuery.toLowerCase().split(/\s+/).filter(t => t.length > 1);
+
+      if (tokens.length <= 1) {
+        conditions.push('(content LIKE ? OR summary LIKE ? OR subject LIKE ?)');
+        const wild = `%${cleanQuery}%`;
+        params.push(wild, wild, wild);
+      } else {
+        // Multi-term hybrid keyword match: match records containing any search token
+        const tokenClauses = tokens.map(() => '(content LIKE ? OR summary LIKE ? OR subject LIKE ?)');
+        conditions.push(`(${tokenClauses.join(' OR ')})`);
+        for (const token of tokens) {
+          const wild = `%${token}%`;
+          params.push(wild, wild, wild);
+        }
+      }
 
       if (filters?.projectId !== undefined) {
         if (filters.projectId === null) {
@@ -939,6 +952,7 @@ export class MemoryRepository {
       throw new DatabaseError(`Failed to search memories: ${query}`, undefined, err as Error);
     }
   }
+
 
   public delete(id: string): void {
     try {
