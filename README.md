@@ -4,7 +4,7 @@
 
 ---
 
-## 🌟 Release Status: Final Release Candidate (v2.0.0)
+## 🌟 Release Status: v2.1.2 — Milestone 1 (Orchestration Studio & Memory Synchronized)
 
 ```text
                          JARVIS 2.0
@@ -46,6 +46,11 @@
 
 | Subsystem | Status | Verification Details |
 |---|---|---|
+| **Orchestrator Studio** | ✅ **VERIFIED (M1)** | Two-gate approval (Plan Review & Dispatch), context-aware prompt engine, OpenCode terminal execution |
+| **Context & Memory Bridge**| ✅ **VERIFIED (M1)** | 10-turn conversation history + SQLite semantic vector memories injected into code orchestration |
+| **Chat & Safety Watchdogs**| ✅ **VERIFIED (M1)** | Question disambiguation, 35s watchdog timer, and manual cancel/unlock protection |
+| **Desktop Retina Vision** | ✅ **VERIFIED (M1)** | Session-aware Windows desktop screen capture via `DesktopRetinaCapture` GDI bridge |
+| **Electron Desktop HUD** | ✅ **VERIFIED (M1)** | Tray icon, global hotkeys (<kbd>Alt</kbd>+<kbd>J</kbd>), auto-starting backend daemon |
 | **Core & Storage** | ✅ **VERIFIED** | Embedded SQLite (`node:sqlite`) with WAL mode, transactions, schema migrations |
 | **Brain & Reasoning** | ✅ **VERIFIED** | Intent routing, planning DAGs, hypothesis reasoning, verification engine |
 | **Memory & Safety** | ✅ **VERIFIED** | Hybrid semantic vector memory (text-embedding-004), deduplication, conflict resolution, secret filtering |
