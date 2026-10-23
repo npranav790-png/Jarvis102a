@@ -103,7 +103,7 @@ try {
         text = parts.slice(1).join(':').trim();
       } else if (output.startsWith('ERROR:')) {
         logger.warn('Windows SAPI STT recognition error reported', { error: output });
-        text = '';
+        throw new Error(`Windows SAPI STT failed: ${output}`);
       }
 
       return {

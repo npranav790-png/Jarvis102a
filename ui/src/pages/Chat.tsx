@@ -25,9 +25,10 @@ import { Link } from 'react-router-dom';
 import { VoiceControl } from '../components/Voice/VoiceControl';
 import { voicePlayer } from '../services/voicePlayer';
 import { MarkdownRenderer } from '../components/Chat/MarkdownRenderer';
+import { ModelSwitcher } from '../components/ModelSwitcher';
 
 export const Chat: React.FC = () => {
-  const { messages, addMessage, setSystemState, activeTasks, pendingApprovals, setPendingApprovals } = useJarvisStore();
+  const { messages, addMessage, setSystemState, activeTasks, pendingApprovals, setPendingApprovals, modelMode } = useJarvisStore();
   const [input, setInput] = useState('');
   const [isCodingMode, setIsCodingMode] = useState(false);
   const [activeOrchJob, setActiveOrchJob] = useState<any>(null);
@@ -394,13 +395,16 @@ export const Chat: React.FC = () => {
     setInput('');
 
     // Check if input is a project directive or coding mode is active
+    const isQuestion = currentInput.includes('?');
     const isProjectRequest =
       isCodingMode ||
       currentInput.startsWith('/project') ||
       currentInput.startsWith('/code') ||
-      currentInput.toLowerCase().startsWith('code ') ||
-      currentInput.toLowerCase().startsWith('project ') ||
-      /^(create|build|make|develop|implement)\s+(a|an|the)?\s*(new\s+)?(project|app|application|service|dashboard|tool)/i.test(currentInput);
+      (!isQuestion && (
+        currentInput.toLowerCase().startsWith('code ') ||
+        currentInput.toLowerCase().startsWith('project ') ||
+        /^(create|build|make|develop|implement)\s+(a|an|the)?\s*(new\s+)?(project|app|application|service|dashboard|tool)\b/i.test(currentInput)
+      ));
 
     if (isProjectRequest) {
       const directive = currentInput
@@ -412,6 +416,12 @@ export const Chat: React.FC = () => {
 
       setIsLoading(true);
       setSystemState('THINKING');
+
+      // Safety timeout so input is never permanently locked
+      const safetyTimeout = setTimeout(() => {
+        setIsLoading(false);
+        setSystemState('IDLE');
+      }, 35000);
 
       const provisionalJob = {
         id: `temp_${Date.now()}`,
@@ -437,10 +447,12 @@ export const Chat: React.FC = () => {
       voicePlayer.speak(`Directive received. Analyzing architecture and preparing phased plan for your review.`);
 
       try {
+        const isSingleShot = /single prompt|single shot|single-shot/i.test(directive);
         const res = await api.post('/orchestrator/jobs', {
           orderText: directive,
           engine: 'opencode',
           autoDispatch: false,
+          skipPlanApproval: isSingleShot,
         });
         if (res?.data) {
           setActiveOrchJob(res.data);
@@ -453,6 +465,7 @@ export const Chat: React.FC = () => {
           timestamp: new Date().toISOString(),
         });
       } finally {
+        clearTimeout(safetyTimeout);
         setIsLoading(false);
       }
       return;
@@ -468,7 +481,7 @@ export const Chat: React.FC = () => {
 
     try {
       // 1. Primary real-time token streaming (<300ms time to first token)
-      const stream = api.streamChat({ message: currentInput });
+      const stream = api.streamChat({ message: currentInput, modelPreference: modelMode });
       for await (const chunk of stream) {
         if (chunk.error) {
           throw new Error(chunk.error);
@@ -489,6 +502,7 @@ export const Chat: React.FC = () => {
           if (finalText) {
             addMessage({
               id: chunk.id || tempAssistantId,
+              replaceId: tempAssistantId,
               role: 'jarvis',
               content: finalText,
               timestamp: new Date().toISOString(),
@@ -504,7 +518,7 @@ export const Chat: React.FC = () => {
       if (!streamSucceeded) {
         // Fallback to standard request
         try {
-          const res = await api.post('/chat', { message: currentInput });
+          const res = await api.post('/chat', { message: currentInput, modelPreference: modelMode });
           const resp = res?.response || res?.content || res?.data?.response || res?.data?.content;
           if (resp) {
             addMessage({
@@ -582,6 +596,7 @@ export const Chat: React.FC = () => {
             <span>JARVIS COMMUNICATION LINK</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <ModelSwitcher variant="compact" />
             <button
               onClick={() => {
                 const next = !isCodingMode;
@@ -1224,6 +1239,25 @@ export const Chat: React.FC = () => {
                   >
                     Open Full Orchestrator <ExternalLink size={10} />
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => setActiveOrchJob(null)}
+                    title="Dismiss Orchestrator Card"
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: 'var(--text-muted)',
+                      borderRadius: '4px',
+                      padding: '2px 8px',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    <X size={11} /> Dismiss
+                  </button>
                 </div>
               </div>
 
@@ -1271,6 +1305,24 @@ export const Chat: React.FC = () => {
             <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-cyan)' }}>
               <Loader size={16} className="spin" />
               <span className="font-mono" style={{ fontSize: '0.8rem' }}>Processing directive...</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLoading(false);
+                  setSystemState('IDLE');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '0.75rem',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  marginLeft: '8px',
+                }}
+              >
+                (Cancel / Unlock)
+              </button>
             </div>
           )}
           <div ref={endRef} />

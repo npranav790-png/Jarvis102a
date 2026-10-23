@@ -2,33 +2,44 @@
   "mcpServers": {
     "github": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
       },
       "transport": "STDIO",
       "trustLevel": "SANDBOXED",
       "description": "Official GitHub MCP server for repo, issue, and PR automation",
-      "enabled": true
+      "enabled": false
     },
     "brave-search": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
       "env": {
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       },
       "transport": "STDIO",
       "trustLevel": "SANDBOXED",
       "description": "Brave Web Search MCP server for live web queries",
-      "enabled": true
+      "enabled": false
     },
     "sqlite-explorer": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "data/jarvis.db"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "--db-path",
+        "data/jarvis.db"
+      ],
       "transport": "STDIO",
       "trustLevel": "SANDBOXED",
       "description": "Direct SQLite querying tool via MCP",
-      "enabled": true
+      "enabled": false
     },
     "remote-tools": {
       "url": "http://127.0.0.1:8000/sse",

@@ -42,8 +42,8 @@ export class GeminiSTTProvider implements SpeechToTextProvider {
       'https://generativelanguage.googleapis.com/v1beta'
     ).replace(/\/+$/, '');
 
-    // Default to fast, low-latency Gemini Flash model
-    this.model = options.model || process.env.GEMINI_STT_MODEL || 'gemini-2.5-flash';
+    // Default to fast, active Gemini Flash model
+    this.model = options.model || process.env.GEMINI_STT_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     this.timeoutMs = options.timeoutMs ?? 25000;
     this.maxRetries = options.maxRetries ?? 2;
     this.initialDelayMs = options.initialDelayMs ?? 1000;
@@ -93,7 +93,8 @@ export class GeminiSTTProvider implements SpeechToTextProvider {
       throw err;
     }
 
-    const mimeType = audio.mimeType || 'audio/wav';
+    const rawMime = audio.mimeType || 'audio/webm';
+    const mimeType = rawMime.split(';')[0].trim();
     const base64Audio = audio.buffer.toString('base64');
 
     const payload = {

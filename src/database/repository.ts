@@ -407,6 +407,21 @@ export class MessageRepository {
     }
   }
 
+  public listRecentBySession(sessionId: string, limit: number = 20): MessageRecord[] {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT * FROM messages
+        WHERE session_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?
+      `);
+      const rows = stmt.all(sessionId, limit) as unknown as MessageRecord[];
+      return rows.reverse();
+    } catch (err) {
+      throw new DatabaseError(`Failed to list recent messages for session: ${sessionId}`, undefined, err as Error);
+    }
+  }
+
   public getRecent(limit: number = 30): MessageRecord[] {
     try {
       const stmt = this.db.prepare(`

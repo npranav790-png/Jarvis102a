@@ -70,24 +70,30 @@ export class ScreenCaptureTool implements ITool<ScreenCaptureInput, ScreenCaptur
 
     try {
       if (isWin) {
-        // Built-in Windows .NET screen capture via PowerShell (Zero dependencies)
-        const psScript = `
-Add-Type -AssemblyName System.Windows.Forms;
-Add-Type -AssemblyName System.Drawing;
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds;
-$bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height;
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap);
-$graphics.CopyFromScreen($screen.X, $screen.Y, 0, 0, $bitmap.Size);
-$fmt = [System.Drawing.Imaging.ImageFormat]::${format === 'jpeg' ? 'Jpeg' : 'Png'};
-$bitmap.Save('${outPath.replace(/\\/g, '\\\\')}', $fmt);
-$graphics.Dispose();
-$bitmap.Dispose();
-Write-Output "$($screen.Width)x$($screen.Height)";
-`;
-        const { stdout } = await execAsync(
-          `powershell -NoProfile -NonInteractive -Command "${psScript.replace(/\r?\n/g, ' ')}"`,
-          { timeout: 8000 }
-        );
+        // Built-in Windows .NET screen capture with interactive desktop switching
+        const scriptCandidates = [
+          path.resolve(process.cwd(), 'scripts', 'windows_screen_capture.ps1'),
+          path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', '..', '..', 'scripts', 'windows_screen_capture.ps1')
+        ];
+        const scriptPath = scriptCandidates.find(p => fs.existsSync(p));
+
+        let stdout = '';
+        if (scriptPath) {
+          const res = await execAsync(
+            `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -OutPath "${outPath}" -Format "${format}"`,
+            { timeout: 10000 }
+          );
+          stdout = res.stdout;
+        } else {
+          // Direct fallback using inline PowerShell
+          const psScript = `Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $b = New-Object System.Drawing.Bitmap $s.Width, $s.Height; $g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($s.X, $s.Y, 0, 0, $s.Size); $fmt = [System.Drawing.Imaging.ImageFormat]::${format === 'jpeg' ? 'Jpeg' : 'Png'}; $b.Save('${outPath.replace(/\\/g, '\\\\')}', $fmt); $g.Dispose(); $b.Dispose(); Write-Output "$($s.Width)x$($s.Height)";`;
+          const res = await execAsync(
+            `powershell -NoProfile -NonInteractive -Command "${psScript}"`,
+            { timeout: 10000 }
+          );
+          stdout = res.stdout;
+        }
+
         const match = stdout.trim().match(/(\d+)x(\d+)/);
         if (match) {
           width = parseInt(match[1], 10);

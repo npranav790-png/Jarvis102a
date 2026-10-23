@@ -40,6 +40,7 @@ import {
   ResearchAgent,
   AnalysisAgent,
   AutomationAgent,
+  DesktopAgent,
 } from '../agents/specialized/index.js';
 import { AgentExecutionContext, AgentExecutionResult } from '../agents/types.js';
 import { WorkspaceManager } from '../workspace/manager.js';
@@ -298,6 +299,7 @@ export class JarvisEngine {
     this.agentRegistry.register(new ResearchAgent({ toolRegistry: this.toolRegistry, aiService: this.aiService }));
     this.agentRegistry.register(new AnalysisAgent({ toolRegistry: this.toolRegistry, aiService: this.aiService }));
     this.agentRegistry.register(new AutomationAgent({ toolRegistry: this.toolRegistry, aiService: this.aiService }));
+    this.agentRegistry.register(new DesktopAgent({ toolRegistry: this.toolRegistry, aiService: this.aiService }));
 
     this.agentSelector = new AgentSelector(this.agentRegistry);
     this.agentExecutor = new AgentExecutor({

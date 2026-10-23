@@ -22,13 +22,14 @@ export class SpecPromptEngine {
    */
   public async createProjectPlan(
     order: OrchestrationOrder,
-    research: ResearchResult
+    research: ResearchResult,
+    contextSummary?: string
   ): Promise<{ brainstorm: BrainstormResult; projectPlan: ProjectPlan }> {
     logger.info(`Creating phased project plan for order: "${order.orderText}"`);
 
     if (this.aiService) {
       try {
-        return await this.generatePlanViaAI(order, research);
+        return await this.generatePlanViaAI(order, research, contextSummary);
       } catch (err: any) {
         logger.warn(`AI plan generation failed, using deterministic synthesis: ${err.message}`);
       }
@@ -45,13 +46,14 @@ export class SpecPromptEngine {
     order: OrchestrationOrder,
     research: ResearchResult,
     projectPlan: ProjectPlan,
-    brainstorm?: BrainstormResult
+    brainstorm?: BrainstormResult,
+    contextSummary?: string
   ): Promise<EngineeredPrompt> {
     logger.info(`Engineering prompt from approved plan: "${projectPlan.title}"`);
 
     if (this.aiService) {
       try {
-        return await this.generatePromptViaAI(order, research, projectPlan, brainstorm);
+        return await this.generatePromptViaAI(order, research, projectPlan, brainstorm, contextSummary);
       } catch (err: any) {
         logger.warn(`AI prompt synthesis failed, using deterministic synthesis: ${err.message}`);
       }
@@ -74,7 +76,8 @@ export class SpecPromptEngine {
 
   private async generatePlanViaAI(
     order: OrchestrationOrder,
-    research: ResearchResult
+    research: ResearchResult,
+    contextSummary?: string
   ): Promise<{ brainstorm: BrainstormResult; projectPlan: ProjectPlan }> {
     const systemPrompt = `You are the JARVIS Principal Software Architect.
 Analyze the user's project request and codebase context to brainstorm technical architecture and build a structured, phased project plan.
@@ -114,13 +117,15 @@ Discovered Manifests: ${research.manifests.join(', ')}
 Project Structure:
 ${research.projectStructureSummary}
 
+${contextSummary ? `Operator Intent, Conversation & Stored Memories Context:\n${contextSummary}\n` : ''}
+
 Relevant Files:
 ${research.relevantFiles.map((f) => `- ${f.relativePath} (${f.lineCount || 'unknown'} lines)`).join('\n')}
 
 Synthesize the architectural brainstorm and a detailed, phased project plan.`;
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI plan generation timeout')), 6000)
+      setTimeout(() => reject(new Error('AI plan generation timeout')), 45000)
     );
 
     const res = await Promise.race([
@@ -136,7 +141,11 @@ Synthesize the architectural brainstorm and a detailed, phased project plan.`;
       timeoutPromise,
     ]);
 
-    const parsed = JSON.parse(res.content);
+    let jsonStr = res.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+    }
+    const parsed = JSON.parse(jsonStr);
     const brainstorm: BrainstormResult = {
       problemSummary: parsed.brainstorm?.problemSummary || `Implement: ${order.orderText}`,
       architecturalApproach: parsed.brainstorm?.architecturalApproach || 'Modular phased implementation',
@@ -284,7 +293,8 @@ Synthesize the architectural brainstorm and a detailed, phased project plan.`;
     order: OrchestrationOrder,
     research: ResearchResult,
     projectPlan: ProjectPlan,
-    brainstorm?: BrainstormResult
+    brainstorm?: BrainstormResult,
+    contextSummary?: string
   ): Promise<EngineeredPrompt> {
     const systemPrompt = `You are the JARVIS Principal Prompt Engineer.
 Based on the developer's approved project plan and codebase context, craft a crystal-clear, highly detailed prompt for an autonomous external coding agent (OpenCode / Kilo Code).
@@ -314,6 +324,7 @@ Output MUST be valid JSON matching:
 ${projectPlan.rawPlanMarkdown || JSON.stringify(projectPlan, null, 2)}
 
 User Directive: "${order.orderText}"
+${contextSummary ? `Operator Context & Memories:\n${contextSummary}\n` : ''}
 Project Workspace: ${research.projectRoot}
 Tech Stack: ${research.techStack.join(', ')}
 
@@ -323,7 +334,7 @@ ${research.relevantFiles.map((f) => `- ${f.relativePath}`).join('\n')}
 Generate the complete prompt and brief prompt report for OpenCode.`;
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('AI prompt synthesis timeout')), 6000)
+      setTimeout(() => reject(new Error('AI prompt synthesis timeout')), 45000)
     );
 
     const res = await Promise.race([
@@ -339,7 +350,11 @@ Generate the complete prompt and brief prompt report for OpenCode.`;
       timeoutPromise,
     ]);
 
-    const parsed = JSON.parse(res.content);
+    let jsonStr = res.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '');
+    }
+    const parsed = JSON.parse(jsonStr);
     const targetFiles = parsed.targetFiles || research.relevantFiles.slice(0, 5).map((f) => f.relativePath);
 
     const report: PromptReport = {

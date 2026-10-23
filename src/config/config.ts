@@ -16,7 +16,7 @@ export function loadConfig(customEnvPath?: string, overrides: Partial<Record<str
   const raw = {
     app: {
       name: process.env.JARVIS_APP_NAME || 'JARVIS',
-      version: process.env.JARVIS_APP_VERSION || '2.0.0',
+      version: process.env.JARVIS_APP_VERSION || '2.1.2',
       env: (process.env.JARVIS_ENV || process.env.NODE_ENV || 'development') as 'development' | 'production' | 'test',
       offline: process.env.JARVIS_OFFLINE === 'true' || process.env.OFFLINE === 'true',
     },
@@ -58,10 +58,10 @@ export function loadConfig(customEnvPath?: string, overrides: Partial<Record<str
     },
     api: {
       enabled: process.env.JARVIS_API_ENABLED !== 'false',
-      host: process.env.JARVIS_API_HOST || '127.0.0.1',
+      host: process.env.JARVIS_API_HOST || '0.0.0.0',
       port: process.env.JARVIS_API_PORT ? parseInt(process.env.JARVIS_API_PORT, 10) : 8787,
       version: process.env.JARVIS_API_VERSION || 'v1',
-      corsOrigins: process.env.JARVIS_API_CORS_ORIGINS ? process.env.JARVIS_API_CORS_ORIGINS.split(',').map(s => s.trim()) : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'],
+      corsOrigins: process.env.JARVIS_API_CORS_ORIGINS ? process.env.JARVIS_API_CORS_ORIGINS.split(',').map(s => s.trim()) : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000', '*'],
       accessTokenTtlSeconds: process.env.JARVIS_API_ACCESS_TOKEN_TTL ? parseInt(process.env.JARVIS_API_ACCESS_TOKEN_TTL, 10) : 3600,
       refreshTokenTtlSeconds: process.env.JARVIS_API_REFRESH_TOKEN_TTL ? parseInt(process.env.JARVIS_API_REFRESH_TOKEN_TTL, 10) : 86400 * 30,
       maxBodySizeMb: process.env.JARVIS_API_MAX_BODY_SIZE ? parseInt(process.env.JARVIS_API_MAX_BODY_SIZE, 10) : 5,
@@ -71,7 +71,7 @@ export function loadConfig(customEnvPath?: string, overrides: Partial<Record<str
     },
     voice: {
       enabled: process.env.JARVIS_VOICE_ENABLED !== 'false',
-      sttProvider: process.env.JARVIS_VOICE_STT_PROVIDER || 'system',
+      sttProvider: process.env.JARVIS_VOICE_STT_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini-stt' : 'system'),
       ttsProvider: process.env.JARVIS_VOICE_TTS_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini-tts' : 'system'),
       wakeWordEnabled: process.env.JARVIS_VOICE_WAKE_WORD_ENABLED === 'true',
       language: process.env.JARVIS_VOICE_LANGUAGE || 'en',

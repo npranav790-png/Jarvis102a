@@ -47,10 +47,17 @@ export class ApiServer {
           return callback(null, true);
         }
 
-        // Allow any localhost / 127.0.0.1 development port
+        // Allow any localhost / 127.0.0.1 development port or LAN / private IP
         try {
           const parsed = new URL(origin);
-          if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+          if (
+            parsed.hostname === 'localhost' ||
+            parsed.hostname === '127.0.0.1' ||
+            /^192\.168\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname) ||
+            /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname) ||
+            /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(parsed.hostname) ||
+            parsed.hostname.endsWith('.local')
+          ) {
             return callback(null, true);
           }
         } catch {

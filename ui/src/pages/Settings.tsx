@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Monitor, Wifi, Camera, Zap, ExternalLink, RefreshCw, Key, Volume2, Server } from 'lucide-react';
 import { useJarvisStore } from '../store/jarvisStore';
 import { api } from '../api/client';
+import { ModelSwitcher } from '../components/ModelSwitcher';
 
 export const Settings: React.FC = () => {
   const { gesturesEnabled, setGesturesEnabled, wsConnected } = useJarvisStore();
@@ -231,7 +232,7 @@ export const Settings: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'var(--bg-tertiary)', borderRadius: '4px' }}>
                   <div>
                     <div style={{ fontWeight: 500 }}>System Version</div>
-                    <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '4px' }}>JARVIS v2.0.0 (Release Candidate)</div>
+                    <div className="text-muted" style={{ fontSize: '0.8rem', marginTop: '4px' }}>JARVIS v2.1.2 (Milestone 1)</div>
                   </div>
                   <div className="font-mono text-muted" style={{ fontSize: '0.8rem' }}>UP TO DATE</div>
                 </div>
@@ -426,6 +427,11 @@ export const Settings: React.FC = () => {
                     {providersData?.privacyMode || 'CLOUD_ONLY'}
                   </div>
                 </div>
+              </div>
+
+              {/* Model Switcher Station */}
+              <div style={{ marginBottom: '20px' }}>
+                <ModelSwitcher variant="full" />
               </div>
 
               {/* Provider Config Cards */}

@@ -15,6 +15,7 @@ import { ApprovalManager } from '../../security/approval-manager.js';
 import { EventBus } from '../../events/bus.js';
 import { createEvent } from '../../events/types.js';
 import { rootLogger } from '../../logging/logger.js';
+import type { JarvisEngine } from '../../core/engine.js';
 
 const logger = rootLogger.child('OpenCodeOrchestrator');
 
@@ -28,8 +29,12 @@ export class OpenCodeOrchestrator {
   constructor(
     private aiService?: AIService,
     private approvalManager?: ApprovalManager,
-    private eventBus?: EventBus
+    private eventBus?: EventBus,
+    private engine?: JarvisEngine
   ) {
+    this.aiService = aiService || engine?.aiService;
+    this.approvalManager = approvalManager || engine?.approvalManager;
+    this.eventBus = eventBus || engine?.eventBus;
     this.researcher = new CodebaseResearcher();
     this.promptEngineer = new SpecPromptEngine(this.aiService);
     this.bridge = new OpenCodeBridge();
@@ -53,6 +58,53 @@ export class OpenCodeOrchestrator {
 
   public getJob(id: string): OrchestrationJob | undefined {
     return this.jobs.get(id);
+  }
+
+  /**
+   * Retrieves conversation history and long-term memory to ground orchestrator orders.
+   */
+  private async getContextSummary(query: string): Promise<string> {
+    if (!this.engine) return '';
+    const parts: string[] = [];
+
+    // 1. Recent conversation context
+    try {
+      if (this.engine.messageRepo) {
+        const recent = this.engine.messageRepo.getRecent(10);
+        if (recent && recent.length > 0) {
+          const formatted = recent
+            .filter((m: any) => m.content && m.content !== 'Task initiated.')
+            .map((m: any) => `[${m.role === 'user' ? 'Operator' : 'JARVIS'}]: ${m.content.slice(0, 350)}`)
+            .join('\n');
+          if (formatted) {
+            parts.push(`Recent Conversation Context:\n${formatted}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.debug(`Could not retrieve recent chat context: ${err.message}`);
+    }
+
+    // 2. Persistent knowledge & memory
+    try {
+      if (this.engine.memoryService) {
+        const memories = await this.engine.memoryService.search(query, { maxResults: 6 });
+        if (memories && memories.length > 0) {
+          const memStr = memories.map((m: any) => `- ${m.memory.content}`).join('\n');
+          parts.push(`Stored Project Knowledge & User Memory:\n${memStr}`);
+        } else {
+          const general = this.engine.memoryService.listMemories({ status: 'ACTIVE', limit: 6 });
+          if (general && general.length > 0) {
+            const memStr = general.map((m: any) => `- ${m.content}`).join('\n');
+            parts.push(`Stored System Knowledge & Memory:\n${memStr}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      logger.debug(`Could not retrieve memories: ${err.message}`);
+    }
+
+    return parts.join('\n\n');
   }
 
   /**
@@ -98,24 +150,28 @@ export class OpenCodeOrchestrator {
       job.status = 'BRAINSTORMING';
       job.updatedAt = new Date().toISOString();
 
+      // Retrieve full memory and chat history context
+      const contextSummary = await this.getContextSummary(order.orderText);
+
       const stage1Log: ExecutionLogChunk = {
         timestamp: new Date().toISOString(),
         stream: 'system',
-        chunk: `[STAGE 1] Codebase research complete: identified ${research.relevantFiles.length} key source files (${research.techStack.join(', ')}).\n[STAGE 2] Synthesizing architectural review and phased project plan...\n`,
+        chunk: `[STAGE 1] Codebase research complete: identified ${research.relevantFiles.length} key source files (${research.techStack.join(', ')}).\n${contextSummary ? '[CONTEXT] Retained recent conversation history & stored memories.\n' : ''}[STAGE 2] Synthesizing architectural review and phased project plan...\n`,
       };
       job.executionLogs.push(stage1Log);
       this.emitEvent('orchestrator:analyzed', { jobId, researchSummary: research.projectStructureSummary });
       this.emitEvent('orchestrator:log', { jobId, chunk: stage1Log });
 
       // 2. Architectural Brainstorming & Phased Project Plan
-      const { brainstorm, projectPlan } = await this.promptEngineer.createProjectPlan(order, research);
+      const { brainstorm, projectPlan } = await this.promptEngineer.createProjectPlan(order, research, contextSummary);
       job.brainstorm = brainstorm;
       job.projectPlan = projectPlan;
       job.updatedAt = new Date().toISOString();
 
-      // If client explicitly requested to skip plan approval (e.g. quick single-shot scripts)
-      if (order.skipPlanApproval) {
-        return await this.generatePromptsAndAwaitDispatch(jobId);
+      // If client explicitly requested single-shot / skip plan approval
+      const isSingleShot = order.skipPlanApproval || /in a single prompt|single shot|single-shot/i.test(order.orderText);
+      if (isSingleShot) {
+        return await this.generatePromptsAndAwaitDispatch(jobId, undefined, contextSummary);
       }
 
       // Gate 1: Awaiting Human Plan Approval
@@ -156,7 +212,22 @@ export class OpenCodeOrchestrator {
       throw new Error(`Orchestration job not found: ${jobId}`);
     }
 
-    if (job.status !== 'AWAITING_PLAN_APPROVAL') {
+    // If already approved, return cleanly without throwing
+    if (job.status === 'PLAN_APPROVED' || job.status === 'PROMPT_READY' || job.status === 'AWAITING_APPROVAL' || job.status === 'APPROVED' || job.status === 'DEVELOPING') {
+      return job;
+    }
+
+    // If job is still analyzing or brainstorming, wait briefly for project plan to finish synthesis
+    if (job.status === 'ANALYZING' || job.status === 'BRAINSTORMING') {
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 500));
+        if ((job.status as string) === 'AWAITING_PLAN_APPROVAL' || job.projectPlan) {
+          break;
+        }
+      }
+    }
+
+    if (job.status !== 'AWAITING_PLAN_APPROVAL' && !job.projectPlan) {
       throw new Error(`Job ${jobId} plan cannot be approved in state: ${job.status}`);
     }
 
@@ -208,21 +279,26 @@ export class OpenCodeOrchestrator {
    */
   private async generatePromptsAndAwaitDispatch(
     jobId: string,
-    _planModifications?: string
+    _planModifications?: string,
+    contextSummary?: string
   ): Promise<OrchestrationJob> {
     const job = this.jobs.get(jobId);
     if (!job || !job.research || !job.projectPlan) {
       throw new Error(`Cannot engineer prompt: job ${jobId} missing research or plan`);
     }
 
-    job.status = 'BRAINSTORMING';
+    // Keep status as PLAN_APPROVED while synthesizing prompts (do NOT revert to BRAINSTORMING)
+    job.status = 'PLAN_APPROVED';
     job.updatedAt = new Date().toISOString();
+
+    const ctx = contextSummary || await this.getContextSummary(job.order.orderText);
 
     const prompt = await this.promptEngineer.engineerPromptFromPlan(
       job.order,
       job.research,
       job.projectPlan,
-      job.brainstorm
+      job.brainstorm,
+      ctx
     );
 
     job.engineeredPrompt = prompt;
@@ -306,6 +382,19 @@ export class OpenCodeOrchestrator {
     const job = this.jobs.get(jobId);
     if (!job) {
       throw new Error(`Orchestration job not found: ${jobId}`);
+    }
+
+    if (job.status === 'APPROVED' || job.status === 'DEVELOPING') {
+      return job;
+    }
+
+    // Auto-resolve linked ApprovalManager item if present
+    if (job.approvalId && this.approvalManager) {
+      try {
+        this.approvalManager.approve(job.approvalId, 'Operator authorized in Orchestrator');
+      } catch {
+        // Best effort
+      }
     }
 
     if (job.status !== 'AWAITING_APPROVAL' && job.status !== 'PROMPT_READY') {

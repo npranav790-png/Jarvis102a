@@ -14,8 +14,21 @@ export class ChatController {
     let memorySnippets: string[] = [];
     if (this.runtime.engine.memoryService) {
       try {
-        const memories = await this.runtime.engine.memoryService.search(userMessage, { maxResults: 4 });
+        const memories = await this.runtime.engine.memoryService.search(userMessage, { maxResults: 6 });
         memorySnippets = memories.map(m => m.memory.content);
+
+        // Include active long-term memories if snippet list is short
+        if (memorySnippets.length < 3) {
+          const generalMemories = this.runtime.engine.memoryService.listMemories({
+            status: 'ACTIVE',
+            limit: 6,
+          });
+          for (const gm of generalMemories) {
+            if (!memorySnippets.includes(gm.content)) {
+              memorySnippets.push(gm.content);
+            }
+          }
+        }
       } catch {
         // Fallback silently if memory search encounters an issue
       }
@@ -40,6 +53,7 @@ export class ChatController {
 
       `OPERATIONAL RULES:`,
       `- Provide clear, structured, and actionable answers using clean GitHub-style Markdown.`,
+      `- You possess full access to conversation history and persistent memory. When the user asks about previous ideas, earlier conversation points, past proposals, or stored concepts, reference them accurately and comprehensively without claiming your registers are uninitialized or empty.`,
       `- If the user discusses building a project or writing code, encourage phased architectural planning before executing terminal commands.`,
       `- Current local system time: ${new Date().toLocaleString()}`
     ];
@@ -56,7 +70,8 @@ export class ChatController {
       const schema = z.object({
         sessionId: z.string().optional(),
         message: z.string(),
-        mode: z.enum(['STANDARD', 'FAST', 'REASONING']).default('STANDARD')
+        mode: z.enum(['STANDARD', 'FAST', 'REASONING']).default('STANDARD'),
+        modelPreference: z.enum(['CLOUD', 'LOCAL', 'HYBRID']).optional()
       });
       const parsed = schema.parse(req.body);
 
@@ -69,7 +84,7 @@ export class ChatController {
           role: 'user',
           content: parsed.message,
           task_id: null,
-          metadata_json: JSON.stringify({ mode: parsed.mode }),
+          metadata_json: JSON.stringify({ mode: parsed.mode, modelPreference: parsed.modelPreference }),
           created_at: new Date().toISOString()
         });
       }
@@ -77,30 +92,51 @@ export class ChatController {
       // Build JARVIS system context
       const systemPrompt = await this.buildSystemContext(parsed.message, parsed.sessionId);
 
-      // Gather multi-turn context
+      // Gather multi-turn context (chronological history up to 24 messages)
       let messagesList: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
         { role: 'system', content: systemPrompt }
       ];
-      if (parsed.sessionId && this.runtime.engine.messageRepo) {
-        const past = this.runtime.engine.messageRepo.listBySession(parsed.sessionId, 12);
-        const pastItems = past.map(m => ({
-          role: m.role === 'jarvis' ? 'assistant' : (m.role as any),
-          content: m.content
-        }));
-        messagesList.push(...pastItems);
+
+      if (this.runtime.engine.messageRepo) {
+        let past: MessageRecord[] = [];
+        if (parsed.sessionId) {
+          past = this.runtime.engine.messageRepo.listRecentBySession(parsed.sessionId, 24);
+          if (past.length === 0) {
+            past = this.runtime.engine.messageRepo.getRecent(24);
+          }
+        } else {
+          past = this.runtime.engine.messageRepo.getRecent(24);
+        }
+
+        // Exclude the current newly-inserted message
+        past = past.filter(m => m.id !== userMsgId);
+
+        for (const m of past) {
+          if (!m.content || m.content === 'Task initiated.') continue;
+          messagesList.push({
+            role: m.role === 'jarvis' ? 'assistant' : (m.role as any),
+            content: m.content
+          });
+        }
       }
 
-      if (messagesList.length === 1) {
-        messagesList.push({ role: 'user', content: parsed.message });
-      } else if (messagesList[messagesList.length - 1].content !== parsed.message) {
-        messagesList.push({ role: 'user', content: parsed.message });
-      }
+      // Append current user message
+      messagesList.push({ role: 'user', content: parsed.message });
 
       const routingTaskType: AITaskType = parsed.mode === 'FAST' ? 'FAST' : (parsed.mode === 'REASONING' ? 'REASONING' : 'GENERAL');
+      const routingPrivacyMode = parsed.modelPreference === 'LOCAL' 
+        ? 'PREFER_LOCAL' 
+        : (parsed.modelPreference === 'CLOUD' 
+          ? 'CLOUD_PREFERRED' 
+          : (parsed.modelPreference === 'HYBRID' ? 'ALLOW_CLOUD' : undefined));
+
       const aiResult = await this.runtime.engine.aiService.generate({
         modelId: '',
         messages: messagesList,
-        routing: { taskType: routingTaskType }
+        routing: { 
+          taskType: routingTaskType,
+          ...(routingPrivacyMode ? { privacyMode: routingPrivacyMode } : {})
+        }
       });
 
       // Record assistant response
@@ -115,6 +151,18 @@ export class ChatController {
           metadata_json: '{}',
           created_at: new Date().toISOString()
         });
+      }
+
+      // Asynchronously extract and store durable facts/proposals into long-term memory
+      if (this.runtime.engine.memoryService) {
+        import('../../brain/memory/extraction.js').then(({ MemoryExtractor }) => {
+          const extractor = new MemoryExtractor(this.runtime.engine.memoryService!, this.runtime.engine.aiService);
+          extractor.extractAndStore({
+            userInput: parsed.message,
+            finalResponse: aiResult.content,
+            sessionId: parsed.sessionId || null
+          }).catch(() => {});
+        }).catch(() => {});
       }
 
       // Broadcast chat message over eventBus
@@ -167,7 +215,8 @@ export class ChatController {
       const schema = z.object({
         sessionId: z.string().optional(),
         message: z.string(),
-        mode: z.enum(['STANDARD', 'FAST', 'REASONING']).default('STANDARD')
+        mode: z.enum(['STANDARD', 'FAST', 'REASONING']).default('STANDARD'),
+        modelPreference: z.enum(['CLOUD', 'LOCAL', 'HYBRID']).optional()
       });
       const parsed = schema.parse(req.body);
 
@@ -185,7 +234,7 @@ export class ChatController {
           role: 'user',
           content: parsed.message,
           task_id: null,
-          metadata_json: JSON.stringify({ mode: parsed.mode }),
+          metadata_json: JSON.stringify({ mode: parsed.mode, modelPreference: parsed.modelPreference }),
           created_at: new Date().toISOString()
         });
       }
@@ -193,31 +242,53 @@ export class ChatController {
       // Build JARVIS system context
       const systemPrompt = await this.buildSystemContext(parsed.message, parsed.sessionId);
 
-      // Gather multi-turn context
+      // Gather multi-turn context (chronological history up to 24 messages)
       let messagesList: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
         { role: 'system', content: systemPrompt }
       ];
-      if (parsed.sessionId && this.runtime.engine.messageRepo) {
-        const past = this.runtime.engine.messageRepo.listBySession(parsed.sessionId, 12);
-        const pastItems = past.map(m => ({
-          role: m.role === 'jarvis' ? 'assistant' : (m.role as any),
-          content: m.content
-        }));
-        messagesList.push(...pastItems);
+
+      if (this.runtime.engine.messageRepo) {
+        let past: MessageRecord[] = [];
+        if (parsed.sessionId) {
+          past = this.runtime.engine.messageRepo.listRecentBySession(parsed.sessionId, 24);
+          if (past.length === 0) {
+            past = this.runtime.engine.messageRepo.getRecent(24);
+          }
+        } else {
+          past = this.runtime.engine.messageRepo.getRecent(24);
+        }
+
+        // Exclude the current newly-inserted message
+        past = past.filter(m => m.id !== userMsgId);
+
+        for (const m of past) {
+          if (!m.content || m.content === 'Task initiated.') continue;
+          messagesList.push({
+            role: m.role === 'jarvis' ? 'assistant' : (m.role as any),
+            content: m.content
+          });
+        }
       }
 
-      if (messagesList.length === 1) {
-        messagesList.push({ role: 'user', content: parsed.message });
-      } else if (messagesList[messagesList.length - 1].content !== parsed.message) {
-        messagesList.push({ role: 'user', content: parsed.message });
-      }
+      // Append current user message
+      messagesList.push({ role: 'user', content: parsed.message });
 
       let fullResponse = '';
       const routingTaskType: AITaskType = parsed.mode === 'FAST' ? 'FAST' : (parsed.mode === 'REASONING' ? 'REASONING' : 'GENERAL');
+      const routingPrivacyMode = parsed.modelPreference === 'LOCAL' 
+        ? 'PREFER_LOCAL' 
+        : (parsed.modelPreference === 'CLOUD' 
+          ? 'CLOUD_PREFERRED' 
+          : (parsed.modelPreference === 'HYBRID' ? 'ALLOW_CLOUD' : undefined));
+
       const stream = this.runtime.engine.aiService.stream({
         modelId: '',
         messages: messagesList,
-        routing: { taskType: routingTaskType, requireStreaming: true }
+        routing: { 
+          taskType: routingTaskType, 
+          requireStreaming: true,
+          ...(routingPrivacyMode ? { privacyMode: routingPrivacyMode } : {})
+        }
       });
 
       for await (const chunk of stream) {
@@ -240,6 +311,27 @@ export class ChatController {
           created_at: new Date().toISOString()
         });
       }
+
+      // Asynchronously extract and store durable facts/proposals into long-term memory
+      if (this.runtime.engine.memoryService) {
+        import('../../brain/memory/extraction.js').then(({ MemoryExtractor }) => {
+          const extractor = new MemoryExtractor(this.runtime.engine.memoryService!, this.runtime.engine.aiService);
+          extractor.extractAndStore({
+            userInput: parsed.message,
+            finalResponse: fullResponse,
+            sessionId: parsed.sessionId || null
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+
+      // Broadcast chat message over eventBus
+      this.runtime.engine.eventBus.emit(createEvent('chat_message', 'ChatController', {
+        id: assistMsgId,
+        role: 'jarvis',
+        content: fullResponse,
+        sessionId: parsed.sessionId,
+        timestamp: new Date().toISOString()
+      })).catch(() => {});
 
       res.write(`data: ${JSON.stringify({ done: true, id: assistMsgId, content: fullResponse })}\n\n`);
       res.end();

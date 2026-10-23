@@ -11,6 +11,9 @@ import { Memory } from './pages/Memory';
 import { Runtime } from './pages/Runtime';
 import { Settings } from './pages/Settings';
 import { Orchestrator } from './pages/Orchestrator';
+import { Devices } from './pages/Devices';
+import { RemoteCompanion } from './pages/RemoteCompanion';
+import { Architecture } from './pages/Architecture';
 
 export const App: React.FC = () => {
   return (
@@ -20,14 +23,18 @@ export const App: React.FC = () => {
           <Route index element={<Home />} />
           <Route path="chat" element={<Chat />} />
           <Route path="orchestrator" element={<Orchestrator />} />
+          <Route path="architecture" element={<Architecture />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="agents" element={<Agents />} />
           <Route path="approvals" element={<Approvals />} />
+          <Route path="devices" element={<Devices />} />
           <Route path="memory" element={<Memory />} />
           <Route path="runtime" element={<Runtime />} />
           <Route path="ai" element={<AI />} />
           <Route path="settings" element={<Settings />} />
         </Route>
+        {/* Dedicated mobile handheld remote terminal */}
+        <Route path="/remote" element={<RemoteCompanion />} />
       </Routes>
     </HashRouter>
   );

@@ -5,6 +5,8 @@ import { Send, Zap, X, Loader, Terminal, Camera, CameraOff } from 'lucide-react'
 import { api } from '../api/client';
 import { VoiceControl } from '../components/Voice/VoiceControl';
 import { voicePlayer } from '../services/voicePlayer';
+import { ModelSwitcher } from '../components/ModelSwitcher';
+import { soundEffects } from '../services/soundEffects';
 
 /**
  * Home View
@@ -14,11 +16,11 @@ import { voicePlayer } from '../services/voicePlayer';
  * and intelligent voice/text dialogue response popovers.
  */
 export const Home: React.FC = () => {
-  const { systemState, addMessage, setSystemState, messages, gesturesEnabled, setGesturesEnabled } = useJarvisStore();
+  const { systemState, addMessage, setSystemState, messages, gesturesEnabled, setGesturesEnabled, modelMode } = useJarvisStore();
   const [input, setInput] = useState('');
   const [showResponse, setShowResponse] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const [showCameraPreview, setShowCameraPreview] = useState(true);
 
   const handleCommand = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +30,7 @@ export const Home: React.FC = () => {
     setInput('');
     setIsSubmitting(true);
     setShowResponse(true);
+    soundEffects.playCommandTransmit();
 
     const userMsg = { id: Date.now().toString(), role: 'user', content: currentInput, timestamp: new Date().toISOString() };
     addMessage(userMsg);
@@ -39,7 +42,7 @@ export const Home: React.FC = () => {
 
     try {
       // 1. Primary real-time token streaming
-      const stream = api.streamChat({ message: currentInput });
+      const stream = api.streamChat({ message: currentInput, modelPreference: modelMode });
       for await (const chunk of stream) {
         if (chunk.error) {
           throw new Error(chunk.error);
@@ -56,10 +59,12 @@ export const Home: React.FC = () => {
         }
         if (chunk.done) {
           streamSucceeded = true;
+          soundEffects.playSuccess();
           const finalText = chunk.content || accumulatedText;
           if (finalText) {
             addMessage({
               id: chunk.id || tempAssistantId,
+              replaceId: tempAssistantId,
               role: 'jarvis',
               content: finalText,
               timestamp: new Date().toISOString(),
@@ -74,7 +79,7 @@ export const Home: React.FC = () => {
       console.warn('Real-time chat stream interrupted in Home, falling back:', streamErr);
       if (!streamSucceeded) {
         try {
-          const res = await api.post('/chat', { message: currentInput });
+          const res = await api.post('/chat', { message: currentInput, modelPreference: modelMode });
           const resp = res?.response || res?.content || res?.data?.response || res?.data?.content;
           if (resp) {
             addMessage({
@@ -141,6 +146,12 @@ export const Home: React.FC = () => {
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
   const lastJarvisMsg = [...messages].reverse().find(m => m.role === 'jarvis');
   const isAwaitingJarvis = isSubmitting || systemState === 'THINKING' || (lastUserMsg && (!lastJarvisMsg || new Date(lastJarvisMsg.timestamp).getTime() < new Date(lastUserMsg.timestamp).getTime()));
+  const hasLiveJarvisContent = Boolean(
+    lastJarvisMsg &&
+    (lastJarvisMsg.content || (lastJarvisMsg as any)?.payload?.content) &&
+    lastUserMsg &&
+    new Date(lastJarvisMsg.timestamp).getTime() >= new Date(lastUserMsg.timestamp).getTime()
+  );
 
   return (
     <div style={{
@@ -153,23 +164,23 @@ export const Home: React.FC = () => {
       background: 'transparent'
     }}>
 
-      {/* Background MediaPipe gesture engine (only renders UI if gestures active and preview toggled) */}
+      {/* Persistent MediaPipe gesture engine with smooth toggle */}
       {gesturesEnabled && (
         <div style={{
           position: 'absolute',
           top: '20px',
           right: '24px',
           zIndex: 50,
-          pointerEvents: 'auto',
-          display: showCameraPreview ? 'block' : 'none'
+          pointerEvents: showCameraPreview ? 'auto' : 'none',
+          visibility: showCameraPreview ? 'visible' : 'hidden',
+          opacity: showCameraPreview ? 1 : 0,
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+          transform: showCameraPreview ? 'translateY(0)' : 'translateY(-12px)'
         }}>
-          <GestureController style={{ width: '260px', borderRadius: '8px', boxShadow: '0 0 20px rgba(0, 200, 255, 0.25)' }} />
-        </div>
-      )}
-      {/* Invisible GestureController instance when camera preview is hidden to keep MediaPipe active */}
-      {gesturesEnabled && !showCameraPreview && (
-        <div style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0, overflow: 'hidden' }}>
-          <GestureController />
+          <GestureController
+            onClose={() => setShowCameraPreview(false)}
+            style={{ width: '350px', borderRadius: '12px', boxShadow: '0 0 30px rgba(0, 229, 255, 0.35)' }}
+          />
         </div>
       )}
 
@@ -211,14 +222,36 @@ export const Home: React.FC = () => {
             </div>
           )}
 
-          {isAwaitingJarvis ? (
+          {hasLiveJarvisContent ? (
+            <div>
+              <div style={{ fontSize: '12px', color: '#D9F8FF', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                {lastJarvisMsg?.content || (lastJarvisMsg as any)?.payload?.content || ''}
+                {isAwaitingJarvis && (
+                  <span style={{
+                    display: 'inline-block',
+                    width: '6px',
+                    height: '13px',
+                    marginLeft: '4px',
+                    backgroundColor: '#00C8FF',
+                    verticalAlign: 'baseline',
+                    boxShadow: '0 0 8px #00C8FF',
+                    animation: 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+                  }} />
+                )}
+              </div>
+            </div>
+          ) : isAwaitingJarvis ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#48E8FF', fontSize: '12px' }}>
               <Loader size={14} className="spin" />
-              <span>Analyzing neural vector...</span>
+              <span>
+                {modelMode === 'LOCAL'
+                  ? 'Analyzing neural vector (Local Qwen Core initializing)...'
+                  : 'Analyzing neural vector...'}
+              </span>
             </div>
           ) : lastJarvisMsg ? (
             <div style={{ fontSize: '12px', color: '#D9F8FF', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-              {lastJarvisMsg.content || lastJarvisMsg.payload?.content || ''}
+              {lastJarvisMsg.content || (lastJarvisMsg as any).payload?.content || ''}
             </div>
           ) : null}
         </div>
@@ -232,9 +265,17 @@ export const Home: React.FC = () => {
         transform: 'translateX(-50%)',
         width: 'min(580px, 92vw)',
         zIndex: 50,
-        pointerEvents: 'auto'
+        pointerEvents: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '8px',
       }}>
+        {/* Model Switcher Pill */}
+        <ModelSwitcher variant="compact" />
+
         <div style={{
+          width: '100%',
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
@@ -281,11 +322,7 @@ export const Home: React.FC = () => {
                   setGesturesEnabled(true);
                   setShowCameraPreview(true);
                 } else {
-                  if (showCameraPreview) {
-                    setShowCameraPreview(false);
-                  } else {
-                    setGesturesEnabled(false);
-                  }
+                  setShowCameraPreview(!showCameraPreview);
                 }
               }}
               style={{

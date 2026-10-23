@@ -2,6 +2,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { JarvisRuntime } from '../../runtime/runtime.js';
 import { AppError } from '../errors/api-error.js';
 
+import os from 'node:os';
+
 export interface Device {
   id: string;
   name: string;
@@ -24,7 +26,7 @@ export interface DevicePairing {
 export class AuthService {
   constructor(private runtime: JarvisRuntime) {}
 
-  public startPairing(): { pairingId: string; code: string; expiresAt: string } {
+  public startPairing(): { pairingId: string; code: string; expiresAt: string; localIp: string; pairingUrl: string } {
     const pairingId = `pair_${randomBytes(8).toString('hex')}`;
     const code = this.generatePairingCode();
     const codeHash = createHash('sha256').update(code).digest('hex');
@@ -35,7 +37,33 @@ export class AuthService {
       VALUES (?, ?, ?, ?)
     `).run(pairingId, codeHash, expiresAt, new Date().toISOString());
 
-    return { pairingId, code, expiresAt };
+    const nets = os.networkInterfaces();
+    let localIp = '127.0.0.1';
+    const candidates: { ip: string; priority: number }[] = [];
+    for (const name of Object.keys(nets)) {
+      const lowerName = name.toLowerCase();
+      for (const net of nets[name] || []) {
+        if (net.family === 'IPv4' && !net.internal) {
+          let prio = 1;
+          if (lowerName.includes('wi-fi') || lowerName.includes('wireless') || lowerName.includes('wlan')) prio = 10;
+          else if (lowerName.includes('ethernet') && !lowerName.includes('vethernet') && !lowerName.includes('virtual')) prio = 8;
+          else if (net.address.startsWith('192.168.')) prio = 6;
+          else if (net.address.startsWith('10.')) prio = 4;
+          else if (lowerName.includes('vethernet') || lowerName.includes('wsl')) prio = 0;
+          candidates.push({ ip: net.address, priority: prio });
+        }
+      }
+    }
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => b.priority - a.priority);
+      localIp = candidates[0].ip;
+    }
+
+    const port = this.runtime.engine.config.api.port || 8787;
+    const uiPort = 5173;
+    const pairingUrl = `http://${localIp}:${uiPort}/#/remote?pairingId=${pairingId}&code=${code}&host=${encodeURIComponent(`http://${localIp}:${port}/api/v1`)}`;
+
+    return { pairingId, code, expiresAt, localIp, pairingUrl };
   }
 
   public completePairing(pairingId: string, code: string, deviceMeta: { name: string; platform: string; appVersion?: string }): { deviceId: string; accessToken: string; refreshToken: string } {

@@ -114,7 +114,7 @@ export class MCPClient {
       await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {}, resources: {} },
-        clientInfo: { name: 'jarvis-2.0', version: '2.0.0' },
+        clientInfo: { name: 'jarvis-2.0', version: '2.1.2' },
       });
 
       this.status = 'CONNECTED';
@@ -138,7 +138,7 @@ export class MCPClient {
       await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {}, resources: {} },
-        clientInfo: { name: 'jarvis-2.0', version: '2.0.0' },
+        clientInfo: { name: 'jarvis-2.0', version: '2.1.2' },
       });
 
       this.status = 'CONNECTED';
@@ -174,7 +174,7 @@ export class MCPClient {
       await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {}, resources: {} },
-        clientInfo: { name: 'jarvis-2.0', version: '2.0.0' },
+        clientInfo: { name: 'jarvis-2.0', version: '2.1.2' },
       });
 
       this.status = 'CONNECTED';

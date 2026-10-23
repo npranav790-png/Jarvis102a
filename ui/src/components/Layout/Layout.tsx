@@ -1,17 +1,129 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Activity, MessageSquare, CheckSquare, Users, Shield, Database, Cpu, Zap, Settings, Radio, Code2 } from 'lucide-react';
+import { Activity, MessageSquare, CheckSquare, Users, Shield, Database, Cpu, Zap, Settings, Radio, Code2, Smartphone, Network, Volume2, VolumeX, Mic, MicOff } from 'lucide-react';
 import { NeuralCore } from '../NeuralCore/NeuralCore';
 import { useJarvisStore } from '../../store/jarvisStore';
 import { api } from '../../api/client';
 import { CommandPalette } from '../CommandPalette';
 import { NotificationCenter } from '../NotificationCenter';
+import { ModelSwitcher } from '../ModelSwitcher';
+import { soundEffects } from '../../services/soundEffects';
+import { wakeWordService } from '../../services/wakeWordService';
+import { voicePlayer } from '../../services/voicePlayer';
+import { SystemBriefingModal } from '../Runtime/SystemBriefingModal';
 
 export const Layout: React.FC = () => {
-  const { wsConnected, systemState, pendingApprovals, activeTasks } = useJarvisStore();
+  const {
+    wsConnected,
+    systemState,
+    setSystemState,
+    pendingApprovals,
+    activeTasks,
+    soundEnabled,
+    setSoundEnabled,
+    wakeWordEnabled,
+    setWakeWordEnabled,
+    modelMode,
+    addMessage,
+  } = useJarvisStore();
   const location = useLocation();
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [timeStr, setTimeStr] = useState('');
+  const [showBriefing, setShowBriefing] = useState(false);
+
+  // Sync sound effects service muted state with store
+  useEffect(() => {
+    soundEffects.setMuted(!soundEnabled);
+  }, [soundEnabled]);
+
+  // Sync wake word ambient listener service with store
+  useEffect(() => {
+    if (wakeWordEnabled) {
+      wakeWordService.start();
+    } else {
+      wakeWordService.stop();
+    }
+    return () => {
+      wakeWordService.stop();
+    };
+  }, [wakeWordEnabled]);
+
+  // Listen for ambient "Hey JARVIS" triggers
+  useEffect(() => {
+    const unsubscribe = wakeWordService.subscribe(async ({ commandText }) => {
+      if (!commandText) {
+        voicePlayer.speak("Online. Standing by.");
+        return;
+      }
+
+      // Check if command is a status briefing request
+      if (/(briefing|status|diagnostic|morning|telemetry)/i.test(commandText)) {
+        setShowBriefing(true);
+        return;
+      }
+
+      // Spoken trailing command
+      addMessage({
+        id: Date.now().toString(),
+        role: 'user',
+        content: commandText,
+        timestamp: new Date().toISOString()
+      });
+      setSystemState('THINKING');
+
+      const tempAssistantId = `stream_${Date.now()}`;
+      let accumulatedText = '';
+      try {
+        const stream = api.streamChat({ message: commandText, modelPreference: modelMode });
+        for await (const chunk of stream) {
+          if (chunk.delta) {
+            accumulatedText += chunk.delta;
+            addMessage({
+              id: tempAssistantId,
+              role: 'jarvis',
+              content: accumulatedText,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          if (chunk.done) {
+            soundEffects.playSuccess();
+            const finalText = chunk.content || accumulatedText;
+            if (finalText) {
+              addMessage({
+                id: chunk.id || tempAssistantId,
+                replaceId: tempAssistantId,
+                role: 'jarvis',
+                content: finalText,
+                timestamp: new Date().toISOString(),
+              });
+              voicePlayer.speak(finalText);
+            }
+            setSystemState('IDLE');
+            break;
+          }
+        }
+      } catch {
+        try {
+          const res = await api.post('/chat', { message: commandText, modelPreference: modelMode });
+          const resp = res?.response || res?.content || res?.data?.response;
+          if (resp) {
+            addMessage({
+              id: Date.now().toString(),
+              role: 'jarvis',
+              content: resp,
+              timestamp: new Date().toISOString()
+            });
+            voicePlayer.speak(resp);
+          }
+        } catch {
+          voicePlayer.speak("I was unable to complete the command.");
+        }
+        setSystemState('IDLE');
+      }
+    });
+
+    return unsubscribe;
+  }, [modelMode, addMessage, setSystemState]);
 
   useEffect(() => {
     api.connectWs();
@@ -35,9 +147,11 @@ export const Layout: React.FC = () => {
     { to: '/', icon: <Activity size={16} />, label: 'HOME' },
     { to: '/chat', icon: <MessageSquare size={16} />, label: 'CHAT' },
     { to: '/orchestrator', icon: <Code2 size={16} />, label: 'ORCHESTRATOR' },
+    { to: '/architecture', icon: <Network size={16} />, label: 'ARCHITECTURE' },
     { to: '/tasks', icon: <CheckSquare size={16} />, label: 'TASKS' },
     { to: '/agents', icon: <Users size={16} />, label: 'AGENTS' },
     { to: '/approvals', icon: <Shield size={16} />, label: 'APPROVALS', badge: pendingApprovals.length },
+    { to: '/devices', icon: <Smartphone size={16} />, label: 'DEVICES' },
     { to: '/memory', icon: <Database size={16} />, label: 'MEMORY' },
     { to: '/runtime', icon: <Cpu size={16} />, label: 'RUNTIME' },
     { to: '/ai', icon: <Zap size={16} />, label: 'AI' },
@@ -74,8 +188,116 @@ export const Layout: React.FC = () => {
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* HUD Audio SFX Engine Toggle */}
+          <button
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              soundEffects.setMuted(!next);
+              if (next) soundEffects.playStartup();
+            }}
+            title={soundEnabled ? 'HUD Audio SFX: Active' : 'HUD Audio SFX: Muted'}
+            style={{
+              background: soundEnabled ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${soundEnabled ? 'rgba(0, 240, 255, 0.35)' : 'var(--border-subtle)'}`,
+              color: soundEnabled ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '10px',
+              fontFamily: 'var(--font-mono)',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {soundEnabled ? <Volume2 size={13} className="text-cyan" /> : <VolumeX size={13} />}
+            <span>{soundEnabled ? 'SFX ON' : 'SFX MUTED'}</span>
+          </button>
+
+          {/* Hands-Free Ambient Wake Word Toggle ("Hey JARVIS") */}
+          <button
+            onClick={() => {
+              const next = !wakeWordEnabled;
+              setWakeWordEnabled(next);
+              if (next) {
+                soundEffects.playStartup();
+              } else {
+                soundEffects.playBargeIn();
+              }
+            }}
+            title={wakeWordEnabled ? 'Hands-Free Listener: ACTIVE (Say "Hey Jarvis")' : 'Hands-Free Listener: Standby'}
+            style={{
+              background: wakeWordEnabled ? 'rgba(0, 255, 200, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${wakeWordEnabled ? 'rgba(0, 255, 200, 0.5)' : 'var(--border-subtle)'}`,
+              color: wakeWordEnabled ? '#00ffc8' : 'var(--text-muted)',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '10px',
+              fontFamily: 'var(--font-mono)',
+              transition: 'all 0.2s ease',
+              boxShadow: wakeWordEnabled ? '0 0 10px rgba(0, 255, 200, 0.25)' : 'none',
+            }}
+          >
+            {wakeWordEnabled ? (
+              <>
+                <span style={{
+                  display: 'inline-block',
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: '#00ffc8',
+                  boxShadow: '0 0 6px #00ffc8',
+                  animation: 'pulse 1.5s infinite'
+                }} />
+                <Mic size={13} />
+                <span>WAKE: ACTIVE</span>
+              </>
+            ) : (
+              <>
+                <MicOff size={13} />
+                <span>WAKE: OFF</span>
+              </>
+            )}
+          </button>
+
+          <ModelSwitcher variant="compact" />
           <NotificationCenter />
+
+          {/* Tactical Morning Status Briefing Trigger */}
+          <button
+            onClick={() => {
+              soundEffects.playStartup();
+              setShowBriefing(true);
+            }}
+            title="Execute Executive Status Briefing & System Telemetry"
+            style={{
+              background: 'rgba(0, 240, 255, 0.12)',
+              border: '1px solid rgba(0, 240, 255, 0.4)',
+              color: '#00f0ff',
+              borderRadius: '4px',
+              padding: '4px 9px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '10px',
+              fontFamily: 'var(--font-mono)',
+              fontWeight: 700,
+              letterSpacing: '1px',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 0 10px rgba(0, 240, 255, 0.15)'
+            }}
+          >
+            <Activity size={12} className="text-cyan animate-pulse" />
+            <span>BRIEFING</span>
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderLeft: '1px solid var(--border-subtle)', paddingLeft: '14px' }}>
             <Radio size={14} className={wsConnected ? 'text-cyan' : 'text-muted'} />
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
@@ -181,6 +403,8 @@ export const Layout: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <SystemBriefingModal isOpen={showBriefing} onClose={() => setShowBriefing(false)} />
     </div>
   );
 };

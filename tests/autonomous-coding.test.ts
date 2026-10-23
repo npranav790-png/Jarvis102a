@@ -7,6 +7,7 @@ import { codeDiagnoseTool } from '../dist/tools/builtin/code-diagnose.js';
 import { CodingAgent } from '../dist/agents/specialized/coding.js';
 import { ToolRegistry } from '../dist/tools/registry.js';
 import { ALL_BUILTIN_TOOLS } from '../dist/tools/builtin/index.js';
+import type { Task } from '../dist/tasks/types.js';
 
 describe('Phase 3: Autonomous Coding & Self-Healing Loop', () => {
   it('executes code.diagnose tool and validates clean diagnostics', async () => {
@@ -32,12 +33,15 @@ describe('Phase 3: Autonomous Coding & Self-Healing Loop', () => {
     const agent = new CodingAgent({ toolRegistry });
 
 
-    const task = {
+    const task: Task = {
       id: 'task_code_heal_1',
+      parentTaskId: null,
+      sessionId: null,
+      projectId: null,
       title: 'Generate Math Utility',
       description: 'Create a clean math helper module with type annotations',
-      type: 'CODING' as any,
-      status: 'CREATED' as any,
+      type: 'CODING',
+      status: 'CREATED',
       priority: 5,
       input: {
         filePath: targetFile,
@@ -51,6 +55,8 @@ describe('Phase 3: Autonomous Coding & Self-Healing Loop', () => {
       maxRetries: 3,
       metadata: {},
       createdAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
       updatedAt: new Date().toISOString(),
     };
 
@@ -68,8 +74,10 @@ describe('Phase 3: Autonomous Coding & Self-Healing Loop', () => {
     assert.ok(fs.readFileSync(targetFile, 'utf-8').includes('function add'));
 
     // Verify tool execution steps: write, diagnose, notify
-    assert.ok(result.steps.length >= 2);
-    const toolNames = result.steps.map(s => s.toolName);
+    assert.ok(result.steps);
+    const steps = result.steps;
+    assert.ok(steps.length >= 2);
+    const toolNames = steps.map(s => s.toolName);
     assert.ok(toolNames.includes('filesystem.write'));
     assert.ok(toolNames.includes('code.diagnose'));
     assert.ok(toolNames.includes('system_notification'));

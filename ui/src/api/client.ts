@@ -1,17 +1,65 @@
 import { useJarvisStore } from '../store/jarvisStore';
 import { voicePlayer } from '../services/voicePlayer';
+import { soundEffects } from '../services/soundEffects';
 
-const API_BASE = 'http://127.0.0.1:8787/api/v1';
-const WS_BASE = 'ws://127.0.0.1:8787/api/v1/ws';
+const getInitialApiBase = () => {
+  if (typeof window !== 'undefined') {
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    const queryParams = new URLSearchParams(window.location.search || '');
+    const customHost = hashParams.get('host') || queryParams.get('host');
+    if (customHost) {
+      localStorage.setItem('jarvis_backend_host', customHost);
+      return customHost.replace(/\/+$/, '');
+    }
+    const savedHost = localStorage.getItem('jarvis_backend_host');
+    if (savedHost) return savedHost.replace(/\/+$/, '');
+    if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return `http://${window.location.hostname}:8787/api/v1`;
+    }
+  }
+  return 'http://127.0.0.1:8787/api/v1';
+};
+
+const getInitialWsBase = () => {
+  if (typeof window !== 'undefined') {
+    const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    const queryParams = new URLSearchParams(window.location.search || '');
+    const customHost = hashParams.get('host') || queryParams.get('host');
+    if (customHost) {
+      return `${customHost.replace(/^http/, 'ws').replace(/\/+$/, '')}/ws`;
+    }
+    const savedHost = localStorage.getItem('jarvis_backend_host');
+    if (savedHost) {
+      return `${savedHost.replace(/^http/, 'ws').replace(/\/+$/, '')}/ws`;
+    }
+    if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return `ws://${window.location.hostname}:8787/api/v1/ws`;
+    }
+  }
+  return 'ws://127.0.0.1:8787/api/v1/ws';
+};
+
+let API_BASE = getInitialApiBase();
+let WS_BASE = getInitialWsBase();
 
 class ApiClient {
   private ws: WebSocket | null = null;
   private reconnectTimer: any = null;
-  // implement the full pair flow. We'll include the header just in case.
+
+  public setBaseUrl(apiBase: string, wsBase?: string) {
+    API_BASE = apiBase.replace(/\/+$/, '');
+    WS_BASE = wsBase || `${API_BASE.replace(/^http/, 'ws')}/ws`;
+  }
+
+  public getBaseUrl(): string {
+    return API_BASE;
+  }
+
   private getHeaders() {
+    const customToken = typeof window !== 'undefined' ? localStorage.getItem('jarvis_device_token') : null;
     return {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer dev_token_or_paired_token'
+      'Authorization': customToken ? `Bearer ${customToken}` : 'Bearer dev_token_or_paired_token'
     };
   }
 
@@ -57,7 +105,7 @@ class ApiClient {
     }
   }
 
-  async *streamChat(body: { message: string; sessionId?: string; mode?: string }): AsyncGenerator<{ delta?: string; done?: boolean; id?: string; content?: string; error?: string }, void, unknown> {
+  async *streamChat(body: { message: string; sessionId?: string; mode?: string; modelPreference?: 'CLOUD' | 'LOCAL' | 'HYBRID' }): AsyncGenerator<{ delta?: string; done?: boolean; id?: string; content?: string; error?: string }, void, unknown> {
     const res = await fetch(`${API_BASE}/chat/stream`, {
       method: 'POST',
       headers: this.getHeaders(),
@@ -98,6 +146,111 @@ class ApiClient {
       }
     }
   }
+
+  async startPairing() {
+    return this.post('/devices/pair/start');
+  }
+
+  async completePairing(pairingId: string, code: string, device: { name: string; platform: string; appVersion?: string }) {
+    const res = await this.post('/devices/pair/complete', { pairingId, code, device });
+    if (res?.accessToken) {
+      localStorage.setItem('jarvis_device_token', res.accessToken);
+      localStorage.setItem('jarvis_device_id', res.deviceId);
+    }
+    return res;
+  }
+
+  async listDevices() {
+    return this.get('/devices');
+  }
+
+  async revokeDevice(deviceId: string) {
+    return this.post(`/devices/${deviceId}/revoke`);
+  }
+
+  async pingDevice(deviceId?: string) {
+    return this.post(`/devices/${deviceId || 'self'}/ping`);
+  }
+
+  async executeDesktopAction(actionOrData: string | { action: string; [key: string]: any }, params: Record<string, any> = {}) {
+    if (typeof actionOrData === 'string') {
+      return this.post('/runtime/desktop/action', { action: actionOrData, ...params });
+    }
+    return this.post('/runtime/desktop/action', actionOrData);
+  }
+
+  async captureScreen() {
+    return this.post('/runtime/screen');
+  }
+
+  // Android Mirroring & App Control
+  async getAndroidStatus() {
+    return this.get('/android/status');
+  }
+
+  async listAndroidDevices() {
+    return this.get('/android/devices');
+  }
+
+  async connectAndroidWifi(ip: string, port = 5555) {
+    return this.post('/android/connect', { ip, port });
+  }
+
+  async enableAndroidWireless(serial?: string) {
+    return this.post('/android/tcpip', { serial });
+  }
+
+  async launchAndroidMirror(options: { serial?: string; fullscreen?: boolean; stayAwake?: boolean; turnScreenOff?: boolean; noAudio?: boolean } = {}) {
+    return this.post('/android/launch-mirror', options);
+  }
+
+  async sendAndroidInput(data: { key?: string; text?: string; serial?: string }) {
+    return this.post('/android/input', data);
+  }
+
+  async launchAndroidApp(packageName: string, serial?: string) {
+    return this.post('/android/app', { packageName, serial });
+  }
+
+  async captureAndroidScreenshot(serial?: string) {
+    const query = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+    return this.get(`/android/screenshot${query}`);
+  }
+
+  async getAndroidTelemetry(serial?: string) {
+    const query = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+    return this.get(`/android/telemetry${query}`);
+  }
+
+  async getAndroidNotifications(serial?: string) {
+    const query = serial ? `?serial=${encodeURIComponent(serial)}` : '';
+    return this.get(`/android/notifications${query}`);
+  }
+
+  async sendAndroidCall(phoneNumber: string, serial?: string) {
+    return this.post('/android/call', { phoneNumber, serial });
+  }
+
+  async sendAndroidSms(phoneNumber: string, message: string, serial?: string) {
+    return this.post('/android/sms', { phoneNumber, message, serial });
+  }
+
+  async getModelMode() {
+    return this.get('/providers/mode');
+  }
+
+  async setModelMode(mode: 'CLOUD' | 'LOCAL' | 'HYBRID', allowFallback = true, preferredModel?: string) {
+    return this.post('/providers/mode', { mode, allowFallback, preferredModel });
+  }
+
+  async getBriefing() {
+    return this.get('/runtime/briefing');
+  }
+
+  async captureDesktopScreen(target: 'fullscreen' | 'window' = 'fullscreen') {
+    return this.post('/runtime/screen', { target, format: 'png', includeBase64: true });
+  }
+
 
   connectWs() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -207,9 +360,17 @@ class ApiClient {
       case 'task.failed': {
         const taskPayload = payload?.payload || payload;
         const status = taskPayload?.status;
-        if (status === 'RUNNING') store.setSystemState('EXECUTING');
-        else if (status === 'FAILED') { store.setSystemState('ERROR'); setTimeout(() => store.setSystemState('IDLE'), 3000); }
-        else if (status === 'COMPLETED') { store.setSystemState('VERIFYING'); setTimeout(() => store.setSystemState('IDLE'), 1500); }
+        if (status === 'RUNNING') {
+          store.setSystemState('EXECUTING');
+        } else if (status === 'FAILED') {
+          store.setSystemState('ERROR');
+          soundEffects.playAlert();
+          setTimeout(() => store.setSystemState('IDLE'), 3000);
+        } else if (status === 'COMPLETED') {
+          store.setSystemState('VERIFYING');
+          soundEffects.playSuccess();
+          setTimeout(() => store.setSystemState('IDLE'), 1500);
+        }
         
         this.get('/tasks').then(res => {
           if (res?.data && Array.isArray(res.data)) store.setActiveTasks(res.data);
@@ -223,6 +384,7 @@ class ApiClient {
       case 'security:approval_requested':
       case 'tool:approval_required': {
         store.setSystemState('WAITING');
+        soundEffects.playAlert();
         const reason = payload?.reason || payload?.action || 'An operation requires your approval.';
         voicePlayer.speak(`Authorization required: ${reason}. Please approve or reject.`);
         this.get('/approvals').then(res => {
@@ -233,23 +395,27 @@ class ApiClient {
       }
       case 'orchestrator:awaiting_approval': {
         store.setSystemState('WAITING');
+        soundEffects.playAlert();
         const promptTitle = payload?.promptTitle || 'the engineered task';
         voicePlayer.speak(`I have analyzed the project and prepared the execution plan for ${promptTitle}. Authorization is required to dispatch OpenCode.`);
         break;
       }
       case 'orchestrator:approved': {
         store.setSystemState('EXECUTING');
+        soundEffects.playModeSwitch();
         voicePlayer.speak(`Authorization confirmed. Dispatching task to OpenCode now.`);
         break;
       }
       case 'orchestrator:completed': {
         store.setSystemState('VERIFYING');
+        soundEffects.playSuccess();
         voicePlayer.speak(`OpenCode execution has completed successfully. Workspace solution diff is ready for review.`);
         setTimeout(() => store.setSystemState('IDLE'), 2500);
         break;
       }
       case 'orchestrator:failed': {
         store.setSystemState('ERROR');
+        soundEffects.playAlert();
         const errText = payload?.error ? `Error: ${payload.error}` : 'OpenCode execution encountered an error.';
         voicePlayer.speak(errText);
         setTimeout(() => store.setSystemState('IDLE'), 3000);
@@ -259,6 +425,8 @@ class ApiClient {
         const chatMsg = payload?.payload ? payload.payload : payload;
         if (chatMsg && (chatMsg.content || chatMsg.text)) {
           const content = chatMsg.content || chatMsg.text || '';
+          const existing = store.messages.find(m => m.id === chatMsg.id || (m.role === 'jarvis' && m.content?.trim() === content.trim()));
+
           store.addMessage({
             id: chatMsg.id || Date.now().toString(),
             role: chatMsg.role || 'jarvis',
@@ -267,7 +435,7 @@ class ApiClient {
             timestamp: chatMsg.timestamp || new Date().toISOString()
           });
 
-          if (chatMsg.role === 'jarvis' || !chatMsg.role) {
+          if (!existing && (chatMsg.role === 'jarvis' || !chatMsg.role)) {
             voicePlayer.speak(content);
           }
         }

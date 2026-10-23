@@ -38,6 +38,17 @@ export class ApprovalsController {
     try {
       const id = req.params.id as string;
       const approved = this.runtime.engine.approvalManager.approve(id, `api:${req.deviceId || 'unknown'}`);
+
+      // If this was an orchestrator dispatch action, trigger terminal launch
+      if (approved.action && approved.action.startsWith('opencode.dispatch:')) {
+        try {
+          const meta = JSON.parse(approved.metadata_json || '{}');
+          if (meta.jobId) {
+            this.runtime.orchestrator.approveJob(meta.jobId).catch(() => {});
+          }
+        } catch {}
+      }
+
       res.json(approved);
     } catch (err) {
       next(err);

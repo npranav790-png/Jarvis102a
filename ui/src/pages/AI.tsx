@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { Zap, Network, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ModelSwitcher } from '../components/ModelSwitcher';
 
 export const AI: React.FC = () => {
   const [status, setStatus] = useState<any>(null);
@@ -69,6 +70,11 @@ export const AI: React.FC = () => {
               <div className="font-mono" style={{ color: 'var(--status-offline)' }}>DISABLED</div>
             </div>
           </div>
+        </div>
+
+        {/* Model Switcher Interactive Station */}
+        <div style={{ marginBottom: '24px' }}>
+          <ModelSwitcher variant="full" />
         </div>
 
         {/* Active Providers & Routing Architecture */}

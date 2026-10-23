@@ -81,8 +81,8 @@ export const NeuralCore: React.FC = () => {
 
     const onGesture = (e: CustomEvent) => {
       if (!isHomePageRef.current) return;
-      const { type, x, y, pinchDist } = e.detail;
-      renderer.interaction.applyGesture(type, x, y, pinchDist);
+      const { type, x, y, pinchDist, tilt, pitch, isVertical, isCupped, depth } = e.detail;
+      renderer.interaction.applyGesture(type, x, y, pinchDist, tilt, pitch, isVertical, isCupped, depth);
     };
 
     // Observers & Listeners

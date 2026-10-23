@@ -12,7 +12,7 @@ export interface PromptBuildParams {
 }
 
 export class PromptManager {
-  private static readonly VERSION = '2.0.0';
+  private static readonly VERSION = '2.1.2';
 
   public static getVersion(): string {
     return PromptManager.VERSION;

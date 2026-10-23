@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const ConfigSchema = z.object({
   app: z.object({
     name: z.string().default('JARVIS'),
-    version: z.string().default('2.0.0'),
+    version: z.string().default('2.1.2'),
     env: z.enum(['development', 'production', 'test']).default('development'),
     offline: z.boolean().default(false),
   }),
@@ -50,10 +50,10 @@ export const ConfigSchema = z.object({
   }),
   api: z.object({
     enabled: z.boolean().default(true),
-    host: z.string().default('127.0.0.1'),
+    host: z.string().default('0.0.0.0'),
     port: z.number().int().positive().default(8787),
     version: z.string().default('v1'),
-    corsOrigins: z.array(z.string()).default(['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000']),
+    corsOrigins: z.array(z.string()).default(['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000', '*']),
     accessTokenTtlSeconds: z.number().int().positive().default(3600), // 1 hour
     refreshTokenTtlSeconds: z.number().int().positive().default(86400 * 30), // 30 days
     maxBodySizeMb: z.number().int().positive().default(5),
@@ -62,10 +62,10 @@ export const ConfigSchema = z.object({
     wsMaxConnections: z.number().int().positive().default(100),
   }).default({
     enabled: true,
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     port: 8787,
     version: 'v1',
-    corsOrigins: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'],
+    corsOrigins: ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000', '*'],
     accessTokenTtlSeconds: 3600,
     refreshTokenTtlSeconds: 86400 * 30,
     maxBodySizeMb: 5,

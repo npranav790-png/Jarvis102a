@@ -9,6 +9,7 @@ export * from './screen-capture.js';
 export * from './resource-monitor.js';
 export * from './notification.js';
 export * from './code-diagnose.js';
+export * from './desktop-control.js';
 
 import {
   filesystemListTool,
@@ -37,6 +38,7 @@ import { screenCaptureTool } from './screen-capture.js';
 import { systemResourceMonitorTool } from './resource-monitor.js';
 import { systemNotificationTool } from './notification.js';
 import { codeDiagnoseTool } from './code-diagnose.js';
+import { desktopControlTool } from './desktop-control.js';
 import { ITool } from '../types.js';
 
 export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
@@ -65,5 +67,6 @@ export const ALL_BUILTIN_TOOLS: ITool<any, any>[] = [
   systemResourceMonitorTool,
   systemNotificationTool,
   codeDiagnoseTool,
+  desktopControlTool,
 ];
 

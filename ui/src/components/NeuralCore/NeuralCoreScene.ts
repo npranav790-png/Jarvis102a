@@ -134,9 +134,10 @@ export class NeuralCoreScene {
     const audioBass = audioAmp > 0 ? spectrum.bass : 0;
     const audioMid = audioAmp > 0 ? spectrum.mid : 0;
 
-    // Apply interactive rotation to Orb Root
+    // Apply interactive rotation to Orb Root (Pitch, Yaw, Roll)
     this.orbRoot.rotation.x = this.interaction.rotX;
     this.orbRoot.rotation.y = this.interaction.rotY;
+    this.orbRoot.rotation.z = this.interaction.rotZ;
 
     // Camera zoom and parallax positioning
     const baseZ = 7.8;

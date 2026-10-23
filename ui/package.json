@@ -1,7 +1,7 @@
 {
   "name": "ui",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.1.2",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
+    "@types/qrcode": "^1.5.6",
     "@types/three": "^0.186.0",
     "lucide-react": "^1.48.0",
+    "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.4",

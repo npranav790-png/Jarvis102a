@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { JarvisRuntime } from '../../runtime/runtime.js';
 import { GeminiProvider } from '../../providers/gemini.js';
+import { createEvent } from '../../events/types.js';
+import { z } from 'zod';
+import { PrivacyMode } from '../../providers/types.js';
 
 function persistKeyToEnv(keyName: string, value: string): void {
   try {
@@ -175,6 +178,109 @@ export class ProvidersController {
         success: false,
         error: err.message || 'Test failed',
       });
+    }
+  };
+
+  public getMode = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const currentPrivacyMode = this.runtime.engine.modelRouter.getPrivacyMode() || this.runtime.engine.config.privacy.mode;
+      const isLocal = currentPrivacyMode === 'LOCAL_ONLY' || currentPrivacyMode === 'PREFER_LOCAL';
+      const isCloud = currentPrivacyMode === 'CLOUD_ONLY' || currentPrivacyMode === 'CLOUD_PREFERRED';
+      const mode: 'LOCAL' | 'CLOUD' | 'HYBRID' = isLocal ? 'LOCAL' : (isCloud ? 'CLOUD' : 'HYBRID');
+      const allowFallback = currentPrivacyMode === 'PREFER_LOCAL' || currentPrivacyMode === 'CLOUD_PREFERRED' || currentPrivacyMode === 'ALLOW_CLOUD';
+
+      let cloudHealth: any = { status: 'UNKNOWN' };
+      let localHealth: any = { status: 'UNKNOWN' };
+      try {
+        if (this.runtime.engine.providerRegistry.has('gemini')) {
+          cloudHealth = await this.runtime.engine.providerRegistry.checkHealth('gemini', false);
+        }
+        if (this.runtime.engine.providerRegistry.has('ollama')) {
+          localHealth = await this.runtime.engine.providerRegistry.checkHealth('ollama', false);
+        }
+      } catch {}
+
+      const allModels = await this.runtime.engine.modelRegistry.listModels();
+      const cloudModels = allModels.filter(m => !m.isLocal).map(m => ({ id: m.id, name: m.name, providerId: m.providerId }));
+      const localModels = allModels.filter(m => m.isLocal).map(m => ({ id: m.id, name: m.name, providerId: m.providerId }));
+
+      res.json({
+        success: true,
+        mode,
+        privacyMode: currentPrivacyMode,
+        allowFallback,
+        preferredModel: this.runtime.engine.modelRouter.getPreferredModel(),
+        cloud: {
+          provider: 'gemini',
+          name: 'Google Gemini (Cloud)',
+          status: cloudHealth.status,
+          latencyMs: cloudHealth.latencyMs,
+          model: this.runtime.engine.config.providers.geminiModel || 'gemini-3.7-flash',
+          models: cloudModels,
+        },
+        local: {
+          provider: 'ollama',
+          name: 'Ollama (Local Engine)',
+          status: localHealth.status,
+          latencyMs: localHealth.latencyMs,
+          baseUrl: this.runtime.engine.config.providers.ollamaBaseUrl || 'http://localhost:11434',
+          models: localModels,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  public setMode = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        mode: z.enum(['CLOUD', 'LOCAL', 'HYBRID']),
+        allowFallback: z.boolean().optional().default(true),
+        preferredModel: z.string().optional(),
+      });
+      const parsed = schema.parse(req.body);
+
+      let privacyMode: PrivacyMode;
+      let priority: string[];
+
+      if (parsed.mode === 'CLOUD') {
+        privacyMode = parsed.allowFallback ? 'CLOUD_PREFERRED' : 'CLOUD_ONLY';
+        priority = ['gemini', 'groq', 'openrouter', 'huggingface', 'ollama'];
+      } else if (parsed.mode === 'LOCAL') {
+        privacyMode = parsed.allowFallback ? 'PREFER_LOCAL' : 'LOCAL_ONLY';
+        priority = ['ollama', 'gemini', 'groq', 'openrouter', 'huggingface'];
+      } else {
+        privacyMode = 'ALLOW_CLOUD';
+        priority = ['gemini', 'ollama', 'groq', 'openrouter', 'huggingface'];
+      }
+
+      this.runtime.engine.modelRouter.setPrivacyMode(privacyMode);
+      this.runtime.engine.modelRouter.setProviderPriority(priority);
+      if (parsed.preferredModel !== undefined) {
+        this.runtime.engine.modelRouter.setPreferredModel(parsed.preferredModel || undefined);
+      }
+      this.runtime.engine.config.privacy.mode = privacyMode;
+
+      persistKeyToEnv('JARVIS_PRIVACY_MODE', privacyMode);
+
+      await this.runtime.engine.eventBus.emit(createEvent('model:mode_changed', 'ProvidersController', {
+        mode: parsed.mode,
+        privacyMode,
+        allowFallback: parsed.allowFallback,
+        timestamp: new Date().toISOString(),
+      }));
+
+      res.json({
+        success: true,
+        mode: parsed.mode,
+        privacyMode,
+        allowFallback: parsed.allowFallback,
+        preferredModel: this.runtime.engine.modelRouter.getPreferredModel(),
+        message: `Intelligence mode updated to ${parsed.mode} (${privacyMode}).`,
+      });
+    } catch (err) {
+      next(err);
     }
   };
 }

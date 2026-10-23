@@ -17,6 +17,7 @@ import { ProvidersController } from './controllers/providers.js';
 import { OrchestratorController } from './controllers/orchestrator.js';
 import { MCPController } from './controllers/mcp.js';
 import { SessionController } from './controllers/sessions.js';
+import { AndroidController } from './controllers/android.js';
 
 export function setupRoutes(runtime: JarvisRuntime): Router {
   const router = Router();
@@ -26,6 +27,7 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
   const auth = new AuthController(runtime);
   const runtimeCtrl = new RuntimeController(runtime);
   const sessionsCtrl = new SessionController(runtime);
+  const androidCtrl = new AndroidController(runtime);
   const tasks = new TasksController(runtime);
 
   const jobs = new JobsController(runtime);
@@ -57,11 +59,28 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
 
   // Devices
   router.get('/devices', auth.listDevices);
+  router.post('/devices/:id/ping', auth.pingDevice);
   router.post('/devices/:id/revoke', rateLimit('revoke_device', RateLimits.STRICT), auth.revokeDevice);
+
+  // Android Mirroring & Full OS Remote Control
+  router.get('/android/status', androidCtrl.getStatus);
+  router.get('/android/devices', androidCtrl.listDevices);
+  router.get('/android/telemetry', androidCtrl.getTelemetry);
+  router.get('/android/notifications', androidCtrl.getNotifications);
+  router.post('/android/connect', androidCtrl.connectWifi);
+  router.post('/android/tcpip', androidCtrl.enableWireless);
+  router.post('/android/launch-mirror', androidCtrl.launchMirror);
+  router.post('/android/input', androidCtrl.sendInput);
+  router.post('/android/app', androidCtrl.launchApp);
+  router.post('/android/call', androidCtrl.triggerCall);
+  router.post('/android/sms', androidCtrl.triggerSms);
+  router.get('/android/screenshot', androidCtrl.captureScreenshot);
 
   // Runtime & Desktop Awareness
   router.get('/runtime/status', runtimeCtrl.status);
+  router.get('/runtime/briefing', runtimeCtrl.getBriefing);
   router.post('/runtime/screen', runtimeCtrl.captureScreen);
+  router.post('/runtime/desktop/action', runtimeCtrl.executeDesktopControl);
   router.get('/runtime/telemetry', runtimeCtrl.getTelemetry);
   router.post('/runtime/notify', runtimeCtrl.notify);
 
@@ -145,6 +164,8 @@ export function setupRoutes(runtime: JarvisRuntime): Router {
 
   // AI Providers & Models
   router.get('/providers', providersCtrl.list);
+  router.get('/providers/mode', providersCtrl.getMode);
+  router.post('/providers/mode', providersCtrl.setMode);
   router.post('/providers/configure', providersCtrl.configure);
   router.post('/providers/test', providersCtrl.test);
 

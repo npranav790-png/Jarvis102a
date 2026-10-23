@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useJarvisStore } from '../store/jarvisStore';
 import { api } from '../api/client';
 import { audioAnalyzer } from '../services/audioAnalyzer';
+import { soundEffects } from '../services/soundEffects';
+import { voicePlayer } from '../services/voicePlayer';
 
 export type VoiceUiState =
   | 'IDLE'
@@ -28,11 +30,13 @@ export function useVoice(options: UseVoiceOptions = {}) {
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const speechRecRef = useRef<any>(null);
   const activeVoiceSessionIdRef = useRef<string | null>(null);
+  const interimTextRef = useRef<string>('');
 
   const { addMessage, setSystemState } = useJarvisStore();
 
   // Stop any active audio playback
   const stopAudio = useCallback(() => {
+    voicePlayer.stop();
     if (activeAudioRef.current) {
       activeAudioRef.current.pause();
       activeAudioRef.current.currentTime = 0;
@@ -47,6 +51,8 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
   // Barge-in interruption (Section 10)
   const interruptVoice = useCallback(async () => {
+    soundEffects.playBargeIn();
+    voicePlayer.stop();
     if (activeAudioRef.current) {
       activeAudioRef.current.pause();
       activeAudioRef.current.currentTime = 0;
@@ -99,6 +105,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
     setVoiceState('IDLE');
     setInterimText('');
+    interimTextRef.current = '';
     setSystemState('IDLE');
   }, [cleanupRecording, stopAudio, setSystemState]);
 
@@ -114,6 +121,7 @@ export function useVoice(options: UseVoiceOptions = {}) {
 
     setErrorMessage(null);
     setInterimText('');
+    interimTextRef.current = '';
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setErrorMessage('Microphone access is not supported by this browser.');
@@ -160,13 +168,25 @@ export function useVoice(options: UseVoiceOptions = {}) {
           rec.lang = 'en-US';
 
           rec.onresult = (e: any) => {
-            let transcript = '';
-            for (let i = e.resultIndex; i < e.results.length; i++) {
-              transcript += e.results[i][0].transcript;
+            let fullTranscript = '';
+            for (let i = 0; i < e.results.length; i++) {
+              fullTranscript += e.results[i][0].transcript;
             }
-            if (transcript) {
-              setInterimText(transcript);
-              if (options.onTranscript) options.onTranscript(transcript);
+            const clean = fullTranscript.trim();
+            if (clean) {
+              interimTextRef.current = clean;
+              setInterimText(clean);
+              if (options.onTranscript) options.onTranscript(clean);
+            }
+          };
+
+          rec.onend = () => {
+            if (speechRecRef.current === rec && streamRef.current) {
+              try {
+                rec.start();
+              } catch {
+                // Ignore if already active or stopping
+              }
             }
           };
 
@@ -243,14 +263,16 @@ export function useVoice(options: UseVoiceOptions = {}) {
       reader.readAsDataURL(recordedBlob);
       const audioBase64 = await base64Promise;
 
+      const clientTranscript = interimTextRef.current || interimText || undefined;
+
       // 3. Dispatch to backend voice session
       const processRes = await api.post(`/voice/sessions/${voiceSessionId}/audio`, {
         audioBase64,
         mimeType: recordedBlob.type || 'audio/webm',
-        transcript: interimText || undefined,
+        transcript: clientTranscript,
       });
 
-      const transcriptText = processRes?.transcript?.text || interimText || '';
+      const transcriptText = processRes?.transcript?.text || clientTranscript || '';
       const responseText = processRes?.response?.cleanText || processRes?.response?.text || '';
       const taskId = processRes?.response?.taskId;
       const audioData = processRes?.audioBase64;
@@ -263,6 +285,13 @@ export function useVoice(options: UseVoiceOptions = {}) {
           timestamp: new Date().toISOString(),
         });
         if (options.onTranscript) options.onTranscript(transcriptText);
+      } else {
+        addMessage({
+          id: Date.now().toString(),
+          role: 'user',
+          content: '[Voice Audio Command]',
+          timestamp: new Date().toISOString(),
+        });
       }
 
       if (responseText) {
@@ -289,12 +318,15 @@ export function useVoice(options: UseVoiceOptions = {}) {
           setVoiceState('IDLE');
           setSystemState('IDLE');
           setInterimText('');
+          interimTextRef.current = '';
         };
 
         audio.onerror = () => {
           activeAudioRef.current = null;
           setVoiceState('IDLE');
           setSystemState('IDLE');
+          setInterimText('');
+          interimTextRef.current = '';
         };
 
         await audio.play();

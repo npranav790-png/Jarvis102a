@@ -6,7 +6,7 @@ const logger = rootLogger.child('OpenWakeWordDetector');
 export class OpenWakeWordDetector implements WakeWordDetector {
   private active = false;
   private callbacks: Array<() => void> = [];
-  private keyword: string;
+  public readonly keyword: string;
 
   constructor(keyword = 'hey jarvis') {
     this.keyword = keyword.toLowerCase();

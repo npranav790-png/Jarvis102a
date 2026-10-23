@@ -206,7 +206,33 @@ export class VoiceService {
         };
       } else {
         const sttStart = Date.now();
-        transcript = await this.runtime.voiceRegistry.STT.transcribe(audio);
+        try {
+          transcript = await this.runtime.voiceRegistry.STT.transcribe(audio);
+        } catch (sttErr) {
+          logger.warn('Primary STT provider failed, attempting fallback to gemini-stt', { err: String(sttErr) });
+          const geminiStt = this.runtime.voiceRegistry.getSTTProvider('gemini-stt');
+          if (geminiStt && await geminiStt.isAvailable()) {
+            transcript = await geminiStt.transcribe(audio);
+          } else {
+            throw sttErr;
+          }
+        }
+
+        // If primary STT returned empty text, and it wasn't gemini-stt, try gemini-stt fallback
+        if ((!transcript.text || transcript.text.trim().length === 0) && this.runtime.voiceRegistry.STT.id !== 'gemini-stt') {
+          const geminiStt = this.runtime.voiceRegistry.getSTTProvider('gemini-stt');
+          if (geminiStt && await geminiStt.isAvailable()) {
+            try {
+              const fallbackTranscript = await geminiStt.transcribe(audio);
+              if (fallbackTranscript.text && fallbackTranscript.text.trim().length > 0) {
+                transcript = fallbackTranscript;
+              }
+            } catch (err) {
+              logger.warn('Gemini STT fallback attempt failed', { err: String(err) });
+            }
+          }
+        }
+
         transcript.voiceSessionId = sessionId;
         sttDuration = Date.now() - sttStart;
       }

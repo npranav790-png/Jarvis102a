@@ -74,4 +74,16 @@ export class AuthController {
       next(err);
     }
   };
+
+  public pingDevice = (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const deviceId = (req.params.id as string) || (req as any).user?.dev;
+      if (deviceId) {
+        this.authService.updateLastSeen(deviceId);
+      }
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

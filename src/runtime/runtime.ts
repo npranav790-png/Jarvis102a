@@ -85,7 +85,8 @@ export class JarvisRuntime {
       this.orchestrator = new OpenCodeOrchestrator(
         this.engine.aiService,
         this.engine.approvalManager,
-        this.engine.eventBus
+        this.engine.eventBus,
+        this.engine
       );
 
       // Start asynchronous services

@@ -45,6 +45,22 @@ export class ModelRouter {
     this.defaultPrivacyMode = mode;
   }
 
+  public getPrivacyMode(): PrivacyMode {
+    return this.defaultPrivacyMode;
+  }
+
+  public isOfflineMode(): boolean {
+    return this.offlineMode;
+  }
+
+  public setProviderPriority(priority: string[]): void {
+    this.providerPriority = priority;
+  }
+
+  public getProviderPriority(): string[] {
+    return [...this.providerPriority];
+  }
+
   public setPreferredModel(model?: string): void {
     this.preferredModel = model;
   }
@@ -163,9 +179,43 @@ export class ModelRouter {
     }
 
     if (candidateScores.length === 0) {
-      const errorMsg = `No eligible free AI models found for task '${request.taskType}' under privacy mode '${privacyMode}'. (Rejected: ${rejectedCandidates.length} models)`;
-      logger.error(errorMsg);
-      throw new ProviderUnavailableError('router', errorMsg);
+      // 9. RECOVERY GRACE-PERIOD: Only apply when all models were rejected SOLELY due to transient
+      // rate limiting or temporary provider downtime, and NOT due to hard capability/context/privacy mismatches.
+      const hasHardRequirementFailure = rejectedCandidates.some(
+        (r) =>
+          r.reason.includes('Context fit mismatch') ||
+          r.reason.includes('Capability mismatch') ||
+          r.reason.includes('Privacy mode')
+      );
+
+      if (!hasHardRequirementFailure) {
+        const transientlyBlocked = rejectedCandidates.filter(
+          (r) => r.reason.toLowerCase().includes('rate_limited') || r.reason.toLowerCase().includes('unavailable')
+        );
+
+        if (transientlyBlocked.length > 0) {
+          const primaryModel = allModels.find(
+            (m) => m.providerId === 'gemini' && (m.id === 'gemini-3.5-flash' || m.id === 'gemini-3.7-flash')
+          ) || allModels.find((m) => m.providerId === 'gemini') || (privacyMode !== 'CLOUD_ONLY' ? allModels.find((m) => m.isLocal) : undefined);
+
+          if (primaryModel) {
+            logger.warn(`Recovering primary candidate ${primaryModel.id} under transient network/rate limit cooldown.`);
+            candidateScores.push({
+              providerId: primaryModel.providerId,
+              modelId: primaryModel.id,
+              score: 50,
+              breakdown: { base: 50, recovery: 50 },
+              isEligible: true,
+            });
+          }
+        }
+      }
+
+      if (candidateScores.length === 0) {
+        const errorMsg = `No eligible free AI models found for task '${request.taskType}' under privacy mode '${privacyMode}'. (Rejected: ${rejectedCandidates.length} models)`;
+        logger.error(errorMsg);
+        throw new ProviderUnavailableError('router', errorMsg);
+      }
     }
 
     // Sort candidate scores descending
@@ -270,11 +320,11 @@ export class ModelRouter {
 
     // 2. Privacy Mode Preferences
     if (privacyMode === 'PREFER_LOCAL' && model.isLocal) {
-      total += 25;
-      breakdown['preferLocalBonus'] = 25;
+      total += 50;
+      breakdown['preferLocalBonus'] = 50;
     } else if ((privacyMode === 'CLOUD_PREFERRED' || privacyMode === 'CLOUD_ONLY') && !model.isLocal) {
-      total += 35;
-      breakdown['cloudPreferredBonus'] = 35;
+      total += 40;
+      breakdown['cloudPreferredBonus'] = 40;
     }
 
     // 3. User-Configured Provider Priority

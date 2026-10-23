@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { Cpu, Clock, RefreshCw } from 'lucide-react';
+import { Cpu, Clock, RefreshCw, Activity } from 'lucide-react';
+import { DesktopVisionControl } from '../components/Runtime/DesktopVisionControl';
+import { SystemBriefingModal } from '../components/Runtime/SystemBriefingModal';
+import { soundEffects } from '../services/soundEffects';
 
 export const Runtime: React.FC = () => {
   const [activeTab, setActiveTab] = useState('OVERVIEW');
@@ -8,6 +11,7 @@ export const Runtime: React.FC = () => {
   const [jobs, setJobs] = useState<any[]>([]);
   const [automations, setAutomations] = useState<any[]>([]);
   const [reminders, setReminders] = useState<any[]>([]);
+  const [showBriefingModal, setShowBriefingModal] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -44,24 +48,54 @@ export const Runtime: React.FC = () => {
             <Cpu size={24} className="text-cyan" /> 
             <span>RUNTIME <span className="text-muted" style={{ fontWeight: 'normal' }}>// CENTER</span></span>
           </h2>
-          <button onClick={fetchData} className="btn" style={{ padding: '8px', background: 'var(--bg-tertiary)' }}>
-            <RefreshCw size={16} className="text-cyan" />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={() => {
+                soundEffects.playStartup();
+                setShowBriefingModal(true);
+              }}
+              style={{
+                background: 'rgba(0, 240, 255, 0.15)',
+                border: '1px solid #00f0ff',
+                color: '#00f0ff',
+                padding: '7px 14px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 0 12px rgba(0, 240, 255, 0.2)'
+              }}
+            >
+              <Activity size={13} className="text-cyan animate-pulse" />
+              <span>⚡ RUN STATUS BRIEFING</span>
+            </button>
+            <button onClick={fetchData} className="btn" style={{ padding: '8px', background: 'var(--bg-tertiary)' }}>
+              <RefreshCw size={16} className="text-cyan" />
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-          {['OVERVIEW', 'JOBS', 'AUTOMATIONS', 'REMINDERS'].map(tab => (
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          {['OVERVIEW', 'SCREEN VISION', 'JOBS', 'AUTOMATIONS', 'REMINDERS'].map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                soundEffects.playModeSwitch();
+                setActiveTab(tab);
+              }}
               style={{
                 background: activeTab === tab ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
                 color: activeTab === tab ? 'var(--accent-cyan)' : 'var(--text-muted)',
                 border: `1px solid ${activeTab === tab ? 'var(--accent-cyan)' : 'transparent'}`,
-                padding: '8px 16px', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-mono)'
+                padding: '8px 16px', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'var(--font-mono)',
+                cursor: 'pointer'
               }}
             >
-              {tab}
+              {tab === 'SCREEN VISION' ? '🖥️ SCREEN VISION' : tab}
             </button>
           ))}
         </div>
@@ -124,6 +158,10 @@ export const Runtime: React.FC = () => {
                 </>
               )}
             </div>
+          )}
+
+          {activeTab === 'SCREEN VISION' && (
+            <DesktopVisionControl />
           )}
 
           {activeTab === 'JOBS' && (
@@ -202,6 +240,8 @@ export const Runtime: React.FC = () => {
           )}
         </div>
       </div>
+
+      <SystemBriefingModal isOpen={showBriefingModal} onClose={() => setShowBriefingModal(false)} />
     </div>
   );
 };
